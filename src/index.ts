@@ -1,12 +1,36 @@
 #!/usr/bin/env node
 
 import { select, password, Separator } from "@inquirer/prompts";
-import { ExitPromptError } from "@inquirer/core";
+import { CancelPromptError, ExitPromptError } from "@inquirer/core";
 import { PROVIDERS, type ProviderModel } from "./providers.js";
 import { readConfig, writeConfig, getProviderApiKey, setProviderApiKey, type SwitchConfig } from "./config.js";
 import { detectActiveProvider, switchProvider } from "./switcher.js";
-
 const RECONFIGURE_KEY = "__reconfigure_api_key__";
+
+const ESC_BYTE = "\x1b";
+
+/**
+ * Wrap an inquirer prompt with ESC-to-cancel support.
+ * Listens for raw ESC byte on stdin while the prompt is active.
+ */
+function withEsc<T>(prompt: Promise<T> & { cancel?: () => void }): Promise<T> {
+  const onData = (data: Buffer) => {
+    // ESC is 0x1b; ignore ESC sequences (arrow keys etc.) which have more bytes
+    if (data.length === 1 && data.toString() === ESC_BYTE) {
+      prompt.cancel?.();
+    }
+  };
+
+  process.stdin.on("data", onData);
+
+  return prompt.finally(() => {
+    process.stdin.removeListener("data", onData);
+  });
+}
+
+function isCancelled(err: unknown): boolean {
+  return err instanceof CancelPromptError || err instanceof ExitPromptError;
+}
 
 async function main(): Promise<void> {
   // Provider selection loop
@@ -42,12 +66,11 @@ async function main(): Promise<void> {
       console.log("✔ API Key saved\n");
     }
 
-    // Single model provider (e.g. MiniMax): show action menu instead of skipping
+    // Single model provider (e.g. MiniMax): show action menu
     if (provider.models.length === 1) {
       const action = await selectSingleModelAction(provider.displayName, provider.models[0].name, provider.apiKeyUrl, currentConfig, provider.id);
       if (action === null) continue; // ESC — back to provider selection
-      if (action === "reconfigure") continue; // key updated, restart provider loop
-      // action === "switch"
+      if (action === "reconfigure") continue;
       const finalConfig = await readConfig();
       const finalApiKey = getProviderApiKey(finalConfig, provider.id);
       if (!finalApiKey) continue;
@@ -60,7 +83,6 @@ async function main(): Promise<void> {
     const result = await selectModel(provider.displayName, provider.models, provider.apiKeyUrl, currentConfig, provider.id);
     if (result === null) continue; // ESC — back to provider selection
 
-    // Re-read config in case API key was reconfigured during model selection
     const finalConfig = await readConfig();
     const finalApiKey = getProviderApiKey(finalConfig, provider.id);
     if (!finalApiKey) continue;
@@ -75,8 +97,8 @@ async function selectProvider(
   config: SwitchConfig,
 ): Promise<string | null> {
   try {
-    return await select({
-      message: "Select Provider",
+    return await withEsc(select({
+      message: "Select Provider  (ESC to quit)",
       choices: PROVIDERS.map((p) => {
         let hint: string;
         if (p.id === activeProviderId) {
@@ -93,22 +115,22 @@ async function selectProvider(
           value: p.id,
         };
       }),
-    });
+    }));
   } catch (err) {
-    if (err instanceof ExitPromptError) return null;
+    if (isCancelled(err)) return null;
     throw err;
   }
 }
 
 async function promptApiKey(apiKeyUrl: string): Promise<string | null> {
   try {
-    const key = await password({
+    const key = await withEsc(password({
       message: `Enter API Key (get it from ${apiKeyUrl})`,
       mask: "*",
-    });
+    }));
     return key && key.trim().length > 0 ? key.trim() : null;
   } catch (err) {
-    if (err instanceof ExitPromptError) return null;
+    if (isCancelled(err)) return null;
     throw err;
   }
 }
@@ -131,13 +153,13 @@ async function selectSingleModelAction(
 ): Promise<"switch" | "reconfigure" | null> {
   while (true) {
     try {
-      const result = await select({
-        message: `${providerName} (${modelName})`,
+      const result = await withEsc(select({
+        message: `${providerName} (${modelName})  (ESC to go back)`,
         choices: [
           { name: `Switch to ${modelName}`, value: "switch" as const },
           { name: "🔑 Reconfigure API Key", value: RECONFIGURE_KEY },
         ],
-      });
+      }));
 
       if (result === RECONFIGURE_KEY) {
         const newKey = await promptApiKey(apiKeyUrl);
@@ -151,7 +173,7 @@ async function selectSingleModelAction(
 
       return "switch";
     } catch (err) {
-      if (err instanceof ExitPromptError) return null;
+      if (isCancelled(err)) return null;
       throw err;
     }
   }
@@ -170,8 +192,8 @@ async function selectModel(
         name: m.displayName ?? m.name,
         value: m.name,
       }));
-      const result = await select({
-        message: `Select model (${providerName})`,
+      const result = await withEsc(select({
+        message: `Select model (${providerName})  (ESC to go back)`,
         default: modelChoices[0].value,
         choices: [
           new Separator("── Actions ──"),
@@ -179,7 +201,7 @@ async function selectModel(
           new Separator("── Models ──"),
           ...modelChoices,
         ],
-      });
+      }));
 
       if (result === RECONFIGURE_KEY) {
         const newKey = await promptApiKey(apiKeyUrl);
@@ -194,7 +216,7 @@ async function selectModel(
 
       return result;
     } catch (err) {
-      if (err instanceof ExitPromptError) return null;
+      if (isCancelled(err)) return null;
       throw err;
     }
   }
