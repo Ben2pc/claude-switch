@@ -53,3 +53,14 @@ export function setProviderApiKey(
     },
   };
 }
+
+export function removeProviderApiKey(
+  config: SwitchConfig,
+  providerId: string,
+): SwitchConfig {
+  const { [providerId]: _, ...rest } = config.providers ?? {};
+  return {
+    ...config,
+    providers: Object.keys(rest).length > 0 ? rest : undefined,
+  };
+}

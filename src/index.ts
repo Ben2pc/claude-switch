@@ -3,11 +3,12 @@
 import { select, password, confirm, Separator } from "@inquirer/prompts";
 import { CancelPromptError, ExitPromptError } from "@inquirer/core";
 import { PROVIDERS, type ProviderModel } from "./providers.js";
-import { readConfig, writeConfig, getProviderApiKey, setProviderApiKey, type SwitchConfig } from "./config.js";
+import { readConfig, writeConfig, getProviderApiKey, setProviderApiKey, removeProviderApiKey, type SwitchConfig } from "./config.js";
 import { detectActiveProvider, detectActiveModel, getActiveBaseUrl, switchProvider } from "./switcher.js";
 import { log } from "./logger.js";
 
 const RECONFIGURE_KEY = "__reconfigure_api_key__";
+const REMOVE_KEY = "__remove_api_key__";
 const ESC_BYTE = "\x1b";
 const CLEAR = { clearPromptOnDone: true };
 
@@ -204,6 +205,7 @@ async function selectSingleModelAction(
         choices: [
           { name: `Switch to ${modelName}`, value: "switch" as const },
           { name: "🔑 Reconfigure API Key", value: RECONFIGURE_KEY },
+          { name: "🗑  Remove API Key", value: REMOVE_KEY },
         ],
       }, CLEAR));
 
@@ -217,6 +219,14 @@ async function selectSingleModelAction(
           await log("api-key-reconfigured", { provider: providerId });
         }
         continue;
+      }
+
+      if (result === REMOVE_KEY) {
+        const updated = removeProviderApiKey(config, providerId);
+        await writeConfig(updated);
+        console.log("✔ API Key removed\n");
+        await log("api-key-removed", { provider: providerId });
+        return null;
       }
 
       return "switch";
@@ -254,6 +264,7 @@ async function selectModel(
           ...modelChoices,
           new Separator(""),
           { name: "🔑 Reconfigure API Key", value: RECONFIGURE_KEY },
+          { name: "🗑  Remove API Key", value: REMOVE_KEY },
         ],
       }, CLEAR));
 
@@ -267,6 +278,14 @@ async function selectModel(
           await log("api-key-reconfigured", { provider: providerId });
         }
         continue;
+      }
+
+      if (result === REMOVE_KEY) {
+        const updated = removeProviderApiKey(config, providerId);
+        await writeConfig(updated);
+        console.log("✔ API Key removed\n");
+        await log("api-key-removed", { provider: providerId });
+        return null;
       }
 
       return result;
