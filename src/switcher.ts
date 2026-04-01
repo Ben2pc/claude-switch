@@ -38,6 +38,26 @@ export async function detectActiveProvider(): Promise<string> {
 }
 
 /**
+ * Get the current active model name from settings.json env.
+ */
+export async function detectActiveModel(): Promise<string | undefined> {
+  const settings = await readSettings();
+  const env = settings.env ?? {};
+  // Check ANTHROPIC_MODEL first, then fall back to ANTHROPIC_DEFAULT_OPUS_MODEL
+  const model = env.ANTHROPIC_MODEL ?? env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+  return typeof model === "string" ? model : undefined;
+}
+
+/**
+ * Get the current ANTHROPIC_BASE_URL from settings, for warning messages.
+ */
+export async function getActiveBaseUrl(): Promise<string | undefined> {
+  const settings = await readSettings();
+  const url = settings.env?.ANTHROPIC_BASE_URL;
+  return typeof url === "string" ? url : undefined;
+}
+
+/**
  * Backup native env keys before switching away from Claude native.
  */
 async function backupNativeEnv(
