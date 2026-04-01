@@ -1,0 +1,50 @@
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const CONFIG_DIR = join(homedir(), ".claude-switch");
+const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+
+export interface ProviderConfig {
+  apiKey: string;
+}
+
+export interface SwitchConfig {
+  nativeEnvBackup?: Record<string, string | number>;
+  providers?: Record<string, ProviderConfig>;
+}
+
+export async function readConfig(): Promise<SwitchConfig> {
+  try {
+    const raw = await readFile(CONFIG_FILE, "utf-8");
+    return JSON.parse(raw) as SwitchConfig;
+  } catch {
+    return {};
+  }
+}
+
+export async function writeConfig(config: SwitchConfig): Promise<void> {
+  await mkdir(CONFIG_DIR, { recursive: true });
+  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf-8");
+}
+
+export function getProviderApiKey(
+  config: SwitchConfig,
+  providerId: string,
+): string | undefined {
+  return config.providers?.[providerId]?.apiKey;
+}
+
+export function setProviderApiKey(
+  config: SwitchConfig,
+  providerId: string,
+  apiKey: string,
+): SwitchConfig {
+  return {
+    ...config,
+    providers: {
+      ...config.providers,
+      [providerId]: { apiKey },
+    },
+  };
+}
