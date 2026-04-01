@@ -45,18 +45,19 @@ ESC → 退出程序。
 ✔ API Key saved
 ```
 
-**已配置时**：直接进入模型选择，但模型列表前增加一个操作选项：
+**已配置时**：直接进入模型选择，列表底部提供 Key 管理操作：
 ```
 ? Select model (↑↓ navigate, ESC back)
-  ── Actions ──
-  🔑 Reconfigure API Key
-  ── Models ──
 ❯ doubao-seed-2.0-code
   doubao-seed-2.0-pro
   ...
+  ──────────
+  🔑 Reconfigure API Key
+  🗑  Remove API Key
 ```
 
-选「Reconfigure API Key」→ 进入 Key 输入流程 → 保存后回到模型选择。
+- 选「Reconfigure API Key」→ 进入 Key 输入流程 → 保存后回到模型选择
+- 选「Remove API Key」→ 删除该 Provider 的 Key → 返回 Provider 选择
 
 ### 二级菜单：选择模型
 
@@ -185,8 +186,9 @@ CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
 2. 选择 Provider → 选择模型 → 正确写入 `~/.claude/settings.json` 的 `env` 字段
 3. ESC 在模型选择返回 Provider 选择，在 Provider 选择退出程序
 4. 未配置 API Key 的 Provider 选择后引导输入并持久化
-5. 已配置的 Provider 提供「重新配置 API Key」选项
-6. 切换时干净清除上一个 Provider 的 env key，不残留
-7. 切出原生时备份 env，切回原生时恢复
-8. 不影响 settings.json 中 env 以外的字段
-9. MiniMax（仅一个模型）跳过模型选择步骤
+5. 已配置的 Provider 提供「重新配置 API Key」和「移除 API Key」选项
+6. 移除 API Key 后返回 Provider 选择，该 Provider 状态变为 `○ not configured`
+7. 切换时干净清除上一个 Provider 的 env key，不残留
+8. 切出原生时备份 env，切回原生时恢复
+9. 不影响 settings.json 中 env 以外的字段
+10. MiniMax（仅一个模型）跳过模型选择步骤
