@@ -23,9 +23,8 @@ async function main(): Promise<void> {
 
     // Claude native: no model selection, switch directly
     if (provider.id === "claude") {
-      await switchProvider(provider, "", "");
-      console.log(`\n✔ Switched to ${provider.displayName}`);
-      console.log("  Please restart Claude Code to apply");
+      const warnings = await switchProvider(provider, "", "");
+      printSwitchResult(provider.displayName, undefined, warnings);
       return;
     }
 
@@ -43,12 +42,17 @@ async function main(): Promise<void> {
       console.log("✔ API Key saved\n");
     }
 
-    // Single model provider (e.g. MiniMax): skip model selection
+    // Single model provider (e.g. MiniMax): show action menu instead of skipping
     if (provider.models.length === 1) {
-      const model = provider.models[0].name;
-      await switchProvider(provider, model, apiKey);
-      console.log(`\n✔ Switched to ${provider.displayName} / ${model}`);
-      console.log("  Please restart Claude Code to apply");
+      const action = await selectSingleModelAction(provider.displayName, provider.models[0].name, provider.apiKeyUrl, currentConfig, provider.id);
+      if (action === null) continue; // ESC — back to provider selection
+      if (action === "reconfigure") continue; // key updated, restart provider loop
+      // action === "switch"
+      const finalConfig = await readConfig();
+      const finalApiKey = getProviderApiKey(finalConfig, provider.id);
+      if (!finalApiKey) continue;
+      const warnings = await switchProvider(provider, provider.models[0].name, finalApiKey);
+      printSwitchResult(provider.displayName, provider.models[0].name, warnings);
       return;
     }
 
@@ -60,9 +64,8 @@ async function main(): Promise<void> {
     const finalConfig = await readConfig();
     const finalApiKey = getProviderApiKey(finalConfig, provider.id);
     if (!finalApiKey) continue;
-    await switchProvider(provider, result, finalApiKey);
-    console.log(`\n✔ Switched to ${provider.displayName} / ${result}`);
-    console.log("  Please restart Claude Code to apply");
+    const warnings = await switchProvider(provider, result, finalApiKey);
+    printSwitchResult(provider.displayName, result, warnings);
     return;
   }
 }
@@ -110,6 +113,50 @@ async function promptApiKey(apiKeyUrl: string): Promise<string | null> {
   }
 }
 
+function printSwitchResult(providerName: string, model: string | undefined, warnings: string[]): void {
+  const target = model ? `${providerName} / ${model}` : providerName;
+  console.log(`\n✔ Switched to ${target}`);
+  for (const w of warnings) {
+    console.log(w);
+  }
+  console.log("  Please restart Claude Code to apply");
+}
+
+async function selectSingleModelAction(
+  providerName: string,
+  modelName: string,
+  apiKeyUrl: string,
+  config: SwitchConfig,
+  providerId: string,
+): Promise<"switch" | "reconfigure" | null> {
+  while (true) {
+    try {
+      const result = await select({
+        message: `${providerName} (${modelName})`,
+        choices: [
+          { name: `Switch to ${modelName}`, value: "switch" as const },
+          { name: "🔑 Reconfigure API Key", value: RECONFIGURE_KEY },
+        ],
+      });
+
+      if (result === RECONFIGURE_KEY) {
+        const newKey = await promptApiKey(apiKeyUrl);
+        if (newKey) {
+          const updated = setProviderApiKey(config, providerId, newKey);
+          await writeConfig(updated);
+          console.log("✔ API Key updated\n");
+        }
+        return "reconfigure";
+      }
+
+      return "switch";
+    } catch (err) {
+      if (err instanceof ExitPromptError) return null;
+      throw err;
+    }
+  }
+}
+
 async function selectModel(
   providerName: string,
   models: ProviderModel[],
@@ -119,16 +166,18 @@ async function selectModel(
 ): Promise<string | null> {
   while (true) {
     try {
+      const modelChoices = models.map((m) => ({
+        name: m.displayName ?? m.name,
+        value: m.name,
+      }));
       const result = await select({
         message: `Select model (${providerName})`,
+        default: modelChoices[0].value,
         choices: [
           new Separator("── Actions ──"),
           { name: "🔑 Reconfigure API Key", value: RECONFIGURE_KEY },
           new Separator("── Models ──"),
-          ...models.map((m) => ({
-            name: m.displayName ?? m.name,
-            value: m.name,
-          })),
+          ...modelChoices,
         ],
       });
 

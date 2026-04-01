@@ -6,6 +6,8 @@ import {
 } from "./config.js";
 import { readSettings, writeSettings, type ClaudeSettings } from "./settings.js";
 
+const SHELL_OVERRIDE_KEYS = ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"] as const;
+
 /**
  * Detect which provider is currently active from a settings object.
  * Returns "claude" only if no ANTHROPIC_BASE_URL is set.
@@ -78,7 +80,7 @@ export async function switchProvider(
   provider: ProviderDefinition,
   model: string,
   apiKey: string,
-): Promise<void> {
+): Promise<string[]> {
   const config = await readConfig();
   const settings = await readSettings();
   const currentEnv = settings.env ?? {};
@@ -114,4 +116,20 @@ export async function switchProvider(
     ...settings,
     env: Object.keys(newEnv).length > 0 ? newEnv : undefined,
   });
+
+  return checkShellOverrides();
+}
+
+/**
+ * Check if shell environment variables may override settings.json.
+ * Returns warning messages if conflicting vars are found.
+ */
+export function checkShellOverrides(): string[] {
+  const warnings: string[] = [];
+  for (const key of SHELL_OVERRIDE_KEYS) {
+    if (process.env[key]) {
+      warnings.push(`  ⚠ Shell env ${key} is set and will override settings.json`);
+    }
+  }
+  return warnings;
 }

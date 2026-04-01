@@ -10,12 +10,14 @@ export interface ClaudeSettings {
 }
 
 export async function readSettings(): Promise<ClaudeSettings> {
+  let raw: string;
   try {
-    const raw = await readFile(SETTINGS_FILE, "utf-8");
-    return JSON.parse(raw) as ClaudeSettings;
-  } catch {
-    return {};
+    raw = await readFile(SETTINGS_FILE, "utf-8");
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw err;
   }
+  return JSON.parse(raw) as ClaudeSettings;
 }
 
 export async function writeSettings(settings: ClaudeSettings): Promise<void> {

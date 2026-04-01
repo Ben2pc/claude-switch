@@ -15,12 +15,14 @@ export interface SwitchConfig {
 }
 
 export async function readConfig(): Promise<SwitchConfig> {
+  let raw: string;
   try {
-    const raw = await readFile(CONFIG_FILE, "utf-8");
-    return JSON.parse(raw) as SwitchConfig;
-  } catch {
-    return {};
+    raw = await readFile(CONFIG_FILE, "utf-8");
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw err;
   }
+  return JSON.parse(raw) as SwitchConfig;
 }
 
 export async function writeConfig(config: SwitchConfig): Promise<void> {
