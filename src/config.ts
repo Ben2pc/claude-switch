@@ -25,7 +25,10 @@ export async function readConfig(): Promise<SwitchConfig> {
 
 export async function writeConfig(config: SwitchConfig): Promise<void> {
   await mkdir(CONFIG_DIR, { recursive: true });
-  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf-8");
+  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 export function getProviderApiKey(

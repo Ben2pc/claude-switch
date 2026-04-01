@@ -4,14 +4,14 @@ import {
   writeConfig,
   type SwitchConfig,
 } from "./config.js";
-import { readSettings, writeSettings } from "./settings.js";
+import { readSettings, writeSettings, type ClaudeSettings } from "./settings.js";
 
 /**
- * Detect which provider is currently active by inspecting settings.json env.
- * Returns the provider id, or "claude" if no third-party provider is detected.
+ * Detect which provider is currently active from a settings object.
+ * Returns "claude" only if no ANTHROPIC_BASE_URL is set.
+ * Returns "unknown" if base URL is set but doesn't match any known provider.
  */
-export async function detectActiveProvider(): Promise<string> {
-  const settings = await readSettings();
+export function detectActiveProviderFromSettings(settings: ClaudeSettings): string {
   const env = settings.env ?? {};
 
   const baseUrl = env.ANTHROPIC_BASE_URL;
@@ -21,9 +21,18 @@ export async function detectActiveProvider(): Promise<string> {
         return provider.id;
       }
     }
+    return "unknown";
   }
 
   return "claude";
+}
+
+/**
+ * Detect which provider is currently active by reading settings.json.
+ */
+export async function detectActiveProvider(): Promise<string> {
+  const settings = await readSettings();
+  return detectActiveProviderFromSettings(settings);
 }
 
 /**
@@ -74,10 +83,12 @@ export async function switchProvider(
   const settings = await readSettings();
   const currentEnv = settings.env ?? {};
 
-  // If currently on native, backup managed keys before switching out
-  const currentProvider = await detectActiveProvider();
+  // Detect current provider from already-read settings (no double read)
+  const currentProviderId = detectActiveProviderFromSettings(settings);
+
+  // Only backup when switching FROM native (not "unknown")
   let updatedConfig = config;
-  if (currentProvider === "claude" && provider.id !== "claude") {
+  if (currentProviderId === "claude" && provider.id !== "claude") {
     updatedConfig = await backupNativeEnv(config, currentEnv);
   }
 
@@ -88,6 +99,9 @@ export async function switchProvider(
     // Restore native backup if available
     if (updatedConfig.nativeEnvBackup) {
       newEnv = { ...newEnv, ...updatedConfig.nativeEnvBackup };
+      // Clear backup after restore
+      updatedConfig = { ...updatedConfig, nativeEnvBackup: undefined };
+      await writeConfig(updatedConfig);
     }
   } else {
     // Write provider-specific env

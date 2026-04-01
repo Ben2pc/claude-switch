@@ -1,25 +1,25 @@
 #!/usr/bin/env node
 
 import { select, password, Separator } from "@inquirer/prompts";
-import { PROVIDERS } from "./providers.js";
-import { readConfig, writeConfig, getProviderApiKey, setProviderApiKey } from "./config.js";
+import { ExitPromptError } from "@inquirer/core";
+import { PROVIDERS, type ProviderModel } from "./providers.js";
+import { readConfig, writeConfig, getProviderApiKey, setProviderApiKey, type SwitchConfig } from "./config.js";
 import { detectActiveProvider, switchProvider } from "./switcher.js";
 
 const RECONFIGURE_KEY = "__reconfigure_api_key__";
 
 async function main(): Promise<void> {
-  const config = await readConfig();
-  const activeProviderId = await detectActiveProvider();
-
-  // Phase 1: Provider selection loop
+  // Provider selection loop
   while (true) {
-    const providerId = await selectProvider(activeProviderId, config);
-    if (providerId === null) {
-      // ESC pressed at provider level — exit
-      return;
-    }
+    // Re-read config each iteration so status hints stay fresh after ESC back
+    const config = await readConfig();
+    const activeProviderId = await detectActiveProvider();
 
-    const provider = PROVIDERS.find((p) => p.id === providerId)!;
+    const providerId = await selectProvider(activeProviderId, config);
+    if (providerId === null) return; // ESC — exit
+
+    const provider = PROVIDERS.find((p) => p.id === providerId);
+    if (!provider) return;
 
     // Claude native: no model selection, switch directly
     if (provider.id === "claude") {
@@ -30,8 +30,8 @@ async function main(): Promise<void> {
     }
 
     // Ensure API key is configured
-    let currentConfig = await readConfig();
-    let apiKey: string | undefined = getProviderApiKey(currentConfig, provider.id);
+    let currentConfig = config;
+    let apiKey = getProviderApiKey(currentConfig, provider.id);
 
     if (!apiKey) {
       console.log(`\n⚠ ${provider.displayName} API Key not configured`);
@@ -43,25 +43,23 @@ async function main(): Promise<void> {
       console.log("✔ API Key saved\n");
     }
 
-    // MiniMax: single model, skip selection
+    // Single model provider (e.g. MiniMax): skip model selection
     if (provider.models.length === 1) {
       const model = provider.models[0].name;
-      await switchProvider(provider, model, apiKey!);
+      await switchProvider(provider, model, apiKey);
       console.log(`\n✔ Switched to ${provider.displayName} / ${model}`);
       console.log("  Please restart Claude Code to apply");
       return;
     }
 
-    // Phase 2: Model selection loop
+    // Model selection loop
     const result = await selectModel(provider.displayName, provider.models, provider.apiKeyUrl, currentConfig, provider.id);
-    if (result === null) {
-      // ESC — back to provider selection
-      continue;
-    }
+    if (result === null) continue; // ESC — back to provider selection
 
-    // result is the selected model name, apiKey may have been updated
+    // Re-read config in case API key was reconfigured during model selection
     const finalConfig = await readConfig();
-    const finalApiKey = getProviderApiKey(finalConfig, provider.id)!;
+    const finalApiKey = getProviderApiKey(finalConfig, provider.id);
+    if (!finalApiKey) continue;
     await switchProvider(provider, result, finalApiKey);
     console.log(`\n✔ Switched to ${provider.displayName} / ${result}`);
     console.log("  Please restart Claude Code to apply");
@@ -71,7 +69,7 @@ async function main(): Promise<void> {
 
 async function selectProvider(
   activeProviderId: string,
-  config: Awaited<ReturnType<typeof readConfig>>,
+  config: SwitchConfig,
 ): Promise<string | null> {
   try {
     return await select({
@@ -93,8 +91,9 @@ async function selectProvider(
         };
       }),
     });
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof ExitPromptError) return null;
+    throw err;
   }
 }
 
@@ -105,16 +104,17 @@ async function promptApiKey(apiKeyUrl: string): Promise<string | null> {
       mask: "*",
     });
     return key && key.trim().length > 0 ? key.trim() : null;
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof ExitPromptError) return null;
+    throw err;
   }
 }
 
 async function selectModel(
   providerName: string,
-  models: { name: string; displayName?: string }[],
+  models: ProviderModel[],
   apiKeyUrl: string,
-  config: Awaited<ReturnType<typeof readConfig>>,
+  config: SwitchConfig,
   providerId: string,
 ): Promise<string | null> {
   while (true) {
@@ -144,8 +144,9 @@ async function selectModel(
       }
 
       return result;
-    } catch {
-      return null;
+    } catch (err) {
+      if (err instanceof ExitPromptError) return null;
+      throw err;
     }
   }
 }
