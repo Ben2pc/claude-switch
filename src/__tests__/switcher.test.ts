@@ -137,9 +137,9 @@ describe("detectActiveModel", () => {
   });
 
   it("falls back to ANTHROPIC_DEFAULT_OPUS_MODEL when ANTHROPIC_MODEL is absent", async () => {
-    mockReadSettings.mockResolvedValue({ env: { ANTHROPIC_DEFAULT_OPUS_MODEL: "GLM-4.7" } });
+    mockReadSettings.mockResolvedValue({ env: { ANTHROPIC_DEFAULT_OPUS_MODEL: "GLM-5.1" } });
 
-    expect(await detectActiveModel()).toBe("GLM-4.7");
+    expect(await detectActiveModel()).toBe("GLM-5.1");
   });
 
   it("returns undefined when neither model key is set", async () => {
@@ -277,9 +277,9 @@ describe("switchProvider", () => {
         ANTHROPIC_BASE_URL: zhipu.baseUrl,
         ANTHROPIC_AUTH_TOKEN: "zhipu-key",
         API_TIMEOUT_MS: "3000000",
-        ANTHROPIC_DEFAULT_OPUS_MODEL: "GLM-4.7",
-        ANTHROPIC_DEFAULT_SONNET_MODEL: "GLM-4.7",
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: "GLM-4.7",
+        ANTHROPIC_DEFAULT_OPUS_MODEL: "GLM-5.1",
+        ANTHROPIC_DEFAULT_SONNET_MODEL: "GLM-5.1",
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: "GLM-5.1",
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: 1,
       },
     });
@@ -305,14 +305,14 @@ describe("switchProvider", () => {
     it("switches from Ark to Zhipu, cleaning old env vars", async () => {
       setupArkState();
 
-      await switchProvider(zhipu, "GLM-4.7", "zhipu-key-abc");
+      await switchProvider(zhipu, "GLM-5.1", "zhipu-key-abc");
 
       const writtenSettings = mockWriteSettings.mock.calls[0][0] as ClaudeSettings;
       // Zhipu keys present
       expect(writtenSettings.env).toMatchObject({
         ANTHROPIC_BASE_URL: zhipu.baseUrl,
         ANTHROPIC_AUTH_TOKEN: "zhipu-key-abc",
-        ANTHROPIC_DEFAULT_OPUS_MODEL: "GLM-4.7",
+        ANTHROPIC_DEFAULT_OPUS_MODEL: "GLM-5.1",
       });
       // Ark's ANTHROPIC_MODEL should be gone (replaced by Zhipu's tier vars)
       expect(writtenSettings.env?.ANTHROPIC_MODEL).toBeUndefined();
@@ -342,7 +342,7 @@ describe("switchProvider", () => {
       });
       mockReadMcpServers.mockResolvedValue({});
 
-      await switchProvider(zhipu, "GLM-4.7", "zhipu-key");
+      await switchProvider(zhipu, "GLM-5.1", "zhipu-key");
 
       const writtenSettings = mockWriteSettings.mock.calls[0][0] as ClaudeSettings;
       expect(writtenSettings.env?.MY_CUSTOM_VAR).toBe("keep-me");
@@ -371,7 +371,7 @@ describe("switchProvider", () => {
     it("does NOT backup when switching between two third-party providers", async () => {
       setupArkState();
 
-      await switchProvider(zhipu, "GLM-4.7", "zhipu-key");
+      await switchProvider(zhipu, "GLM-5.1", "zhipu-key");
 
       // writeConfig should only be called for logging, not for backup
       for (const call of mockWriteConfig.mock.calls) {

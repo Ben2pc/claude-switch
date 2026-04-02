@@ -49,7 +49,6 @@ export const PROVIDERS: ProviderDefinition[] = [
       { name: "doubao-seed-code", displayName: "Doubao Seed Code", description: "Multimodal. Code generation & scheduling" },
       { name: "minimax-m2.5", displayName: "MiniMax M2.5", description: "Coding & tool-calling SOTA" },
       { name: "kimi-k2.5", displayName: "Kimi K2.5", description: "Multimodal. Frontend quality & design" },
-      { name: "glm-4.7", displayName: "GLM 4.7", description: "Code gen, debugging, full-chain" },
       { name: "deepseek-v3.2", displayName: "DeepSeek V3.2", description: "Balanced reasoning, lightweight dev" },
       { name: "ark-code-latest", displayName: "Auto", description: "Smart scheduling, best model match" },
     ],
@@ -67,8 +66,6 @@ export const PROVIDERS: ProviderDefinition[] = [
     baseUrl: "https://open.bigmodel.cn/api/anthropic",
     apiKeyUrl: "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
     models: [
-      { name: "GLM-4.7" },
-      { name: "GLM-4.5-Air" },
       { name: "GLM-5.1" },
       { name: "GLM-5-Turbo" },
       { name: "GLM-5" },

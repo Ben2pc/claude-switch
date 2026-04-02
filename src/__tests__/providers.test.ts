@@ -50,12 +50,12 @@ describe("buildEnv", () => {
 
   it("Zhipu sets tier variables, not ANTHROPIC_MODEL", () => {
     const zhipu = PROVIDERS.find((p) => p.id === "zhipu")!;
-    const env = zhipu.buildEnv("key", "GLM-4.7");
+    const env = zhipu.buildEnv("key", "GLM-5.1");
     expect(env.ANTHROPIC_BASE_URL).toBe("https://open.bigmodel.cn/api/anthropic");
     expect(env.ANTHROPIC_AUTH_TOKEN).toBe("key");
-    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("GLM-4.7");
-    expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("GLM-4.7");
-    expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("GLM-4.7");
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("GLM-5.1");
+    expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("GLM-5.1");
+    expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("GLM-5.1");
     expect(env.API_TIMEOUT_MS).toBe("3000000");
     expect(env).not.toHaveProperty("ANTHROPIC_MODEL");
   });
