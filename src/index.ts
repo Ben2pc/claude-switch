@@ -3,12 +3,15 @@
 import { select, password, confirm, Separator } from "@inquirer/prompts";
 import { CancelPromptError, ExitPromptError } from "@inquirer/core";
 import { PROVIDERS, type ProviderModel } from "./providers.js";
+import { MCP_REGISTRY, MCP_PROVIDER_BUILTIN } from "./mcps.js";
 import { readConfig, writeConfig, getProviderApiKey, setProviderApiKey, removeProviderApiKey, type SwitchConfig } from "./config.js";
-import { detectActiveProvider, detectActiveModel, getActiveBaseUrl, switchProvider } from "./switcher.js";
+import { readMcpServers, writeMcpServers, type McpServerConfig } from "./settings.js";
+import { detectActiveProvider, detectActiveModel, getActiveBaseUrl, switchProvider, type SwitchResult } from "./switcher.js";
 import { log } from "./logger.js";
 
 const RECONFIGURE_KEY = "__reconfigure_api_key__";
 const REMOVE_KEY = "__remove_api_key__";
+const MANAGE_MCP_KEY = "__manage_mcp__";
 const ESC_BYTE = "\x1b";
 const CLEAR = { clearPromptOnDone: true };
 
@@ -31,14 +34,176 @@ function isCancelled(err: unknown): boolean {
   return err instanceof CancelPromptError || err instanceof ExitPromptError;
 }
 
+/**
+ * Refresh MCP configs in settings.json after an API key change for a provider.
+ * Rebuilds all enabled MCPs for that provider with the new key.
+ * If apiKey is null (key removed), removes those MCPs instead.
+ */
+async function refreshMcpsForProvider(
+  providerId: string,
+  apiKey: string | null,
+  config: SwitchConfig,
+): Promise<SwitchConfig> {
+  const providerMcps = MCP_REGISTRY.filter((m) => m.providerId === providerId);
+  if (providerMcps.length === 0) return config;
+
+  const currentServers = await readMcpServers();
+  const updated = { ...currentServers };
+  let changed = false;
+
+  for (const mcp of providerMcps) {
+    if (mcp.id in updated) {
+      if (apiKey) {
+        // Rebuild with new key
+        updated[mcp.id] = mcp.buildConfig(apiKey) as typeof updated[string];
+      } else {
+        // Remove MCP since key was removed
+        delete updated[mcp.id];
+      }
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await writeMcpServers(updated);
+    const affectedIds = providerMcps.filter((m) => m.id in currentServers).map((m) => m.id);
+    await log("mcp-refreshed", { provider: providerId, action: apiKey ? "rebuild" : "remove", affectedMcpIds: affectedIds });
+
+    if (!apiKey) {
+      // Remove from enabledMcps
+      const remaining = (config.enabledMcps ?? []).filter(
+        (id) => !providerMcps.some((m) => m.id === id),
+      );
+      config = { ...config, enabledMcps: remaining.length > 0 ? remaining : undefined };
+      await writeConfig(config);
+    }
+  }
+
+  return config;
+}
+
+async function manageMcps(config: SwitchConfig): Promise<void> {
+  let changed = false;
+  let lastSelected: string | undefined;
+  while (true) {
+    const currentServers = await readMcpServers();
+
+    // Build choices grouped by provider
+    const choices: Array<Separator | { name: string; value: string; disabled?: boolean }> = [];
+    const providerGroups = new Map<string, typeof MCP_REGISTRY>();
+
+    for (const mcp of MCP_REGISTRY) {
+      const group = providerGroups.get(mcp.providerId) ?? [];
+      group.push(mcp);
+      providerGroups.set(mcp.providerId, group);
+    }
+
+    for (const [providerId, mcps] of providerGroups) {
+      const provider = PROVIDERS.find((p) => p.id === providerId);
+      const apiKey = getProviderApiKey(config, providerId);
+      const hasKey = !!apiKey;
+
+      choices.push(new Separator(`── ${provider?.displayName ?? providerId} ${hasKey ? "(API Key configured)" : "(API Key not configured)"} ──`));
+
+      const builtIn = MCP_PROVIDER_BUILTIN[providerId];
+      if (builtIn) {
+        choices.push(new Separator(`  ${builtIn}`));
+      }
+
+      for (const mcp of mcps) {
+        const isEnabled = mcp.id in currentServers;
+        const label = mcp.id;
+        const desc = mcp.description ? `  ${mcp.description}` : "";
+
+        if (!hasKey) {
+          choices.push({ name: `${label}${desc}  ✘ configure API Key first`, value: mcp.id, disabled: true });
+        } else if (isEnabled) {
+          choices.push({ name: `${label}${desc}  ✔ enabled`, value: mcp.id });
+        } else {
+          choices.push({ name: `${label}${desc}  ○ disabled`, value: mcp.id });
+        }
+      }
+    }
+
+    try {
+      const selected = await withEsc(select({
+        message: "Manage MCP Servers (ESC to go back)",
+        loop: false,
+        default: lastSelected,
+        theme: { keybindings: ["vim"] },
+        choices,
+      }));
+
+      if (!selected) continue;
+      lastSelected = selected;
+
+      const mcp = MCP_REGISTRY.find((m) => m.id === selected);
+      if (!mcp) continue;
+
+      const apiKey = getProviderApiKey(config, mcp.providerId);
+      if (!apiKey) continue;
+
+      const isEnabled = selected in currentServers;
+
+      if (isEnabled) {
+        // Disable (toggle on Enter)
+        const updated = { ...currentServers };
+        delete updated[selected];
+        await writeMcpServers(updated);
+        config = {
+          ...config,
+          enabledMcps: (config.enabledMcps ?? []).filter((id) => id !== selected),
+        };
+        if (config.enabledMcps!.length === 0) config.enabledMcps = undefined;
+        await writeConfig(config);
+        changed = true;
+        await log("mcp-disabled", { mcpId: mcp.id, provider: mcp.providerId, remainingEnabled: config.enabledMcps ?? [] });
+      } else {
+        // Enable (toggle on Enter, deduplicate enabledMcps)
+        const updated = {
+          ...currentServers,
+          [selected]: mcp.buildConfig(apiKey),
+        };
+        await writeMcpServers(updated);
+        const newEnabled = [...new Set([...(config.enabledMcps ?? []), selected])];
+        config = {
+          ...config,
+          enabledMcps: newEnabled,
+        };
+        await writeConfig(config);
+        changed = true;
+        await log("mcp-enabled", { mcpId: mcp.id, provider: mcp.providerId, allEnabled: config.enabledMcps ?? [] });
+      }
+    } catch (err) {
+      if (isCancelled(err)) {
+        if (changed) {
+          console.log("  Please restart Claude Code to apply MCP changes");
+        }
+        return;
+      }
+      throw err;
+    }
+  }
+}
+
 async function main(): Promise<void> {
+  let lastProviderId: string | undefined;
   while (true) {
     const config = await readConfig();
     const activeProviderId = await detectActiveProvider();
     const activeModel = await detectActiveModel();
+    const currentServers = await readMcpServers();
+    const mcpActiveCount = MCP_REGISTRY.filter((m) => m.id in currentServers).length;
 
-    const providerId = await selectProvider(activeProviderId, activeModel, config);
+    const providerId = await selectProvider(activeProviderId, activeModel, config, mcpActiveCount, lastProviderId);
     if (providerId === null) return;
+
+    lastProviderId = providerId;
+
+    if (providerId === MANAGE_MCP_KEY) {
+      await manageMcps(config);
+      continue;
+    }
 
     const provider = PROVIDERS.find((p) => p.id === providerId);
     if (!provider) return;
@@ -54,8 +219,8 @@ async function main(): Promise<void> {
         const ok = await confirmAction("Switching will remove these settings. Continue?");
         if (!ok) continue;
       }
-      const warnings = await switchProvider(provider, "", "");
-      printSwitchResult(provider.displayName, undefined, warnings);
+      const switchResult = await switchProvider(provider, "", "");
+      printSwitchResult(provider.displayName, undefined, switchResult, true);
       return;
     }
 
@@ -83,8 +248,8 @@ async function main(): Promise<void> {
       const finalConfig = await readConfig();
       const finalApiKey = getProviderApiKey(finalConfig, provider.id);
       if (!finalApiKey) continue;
-      const warnings = await switchProvider(provider, modelName, finalApiKey);
-      printSwitchResult(provider.displayName, modelName, warnings);
+      const switchResult = await switchProvider(provider, modelName, finalApiKey);
+      printSwitchResult(provider.displayName, modelName, switchResult, false);
       return;
     }
 
@@ -107,8 +272,8 @@ async function main(): Promise<void> {
       if (!ok) continue;
     }
 
-    const warnings = await switchProvider(provider, result, finalApiKey);
-    printSwitchResult(provider.displayName, result, warnings);
+    const switchResult = await switchProvider(provider, result, finalApiKey);
+    printSwitchResult(provider.displayName, result, switchResult, false);
     return;
   }
 }
@@ -117,29 +282,43 @@ async function selectProvider(
   activeProviderId: string,
   activeModel: string | undefined,
   config: SwitchConfig,
+  mcpActiveCount: number,
+  defaultValue?: string,
 ): Promise<string | null> {
+  const totalCount = MCP_REGISTRY.length;
+
   try {
     return await withEsc(select({
       message: "Select Provider (ESC to quit)",
       loop: false,
-      choices: PROVIDERS.map((p) => {
-        let hint: string;
-        if (p.id === activeProviderId) {
-          hint = activeModel ? `● active (${activeModel})` : "● active";
-        } else if (p.id !== "claude" && getProviderApiKey(config, p.id)) {
-          hint = "✔ configured";
-        } else if (p.id === "claude") {
-          hint = activeProviderId === "claude" ? "● active" : "";
-        } else {
-          hint = "○ not configured";
-        }
-        return {
-          name: hint ? `${p.displayName}  ${hint}` : p.displayName,
-          short: p.displayName,
-          value: p.id,
-        };
-      }),
-    }, CLEAR));
+      default: defaultValue,
+      theme: { keybindings: ["vim"] },
+      choices: [
+        ...PROVIDERS.map((p) => {
+          let hint: string;
+          if (p.id === activeProviderId) {
+            hint = activeModel ? `● active (${activeModel})` : "● active";
+          } else if (p.id !== "claude" && getProviderApiKey(config, p.id)) {
+            hint = "✔ configured";
+          } else if (p.id === "claude") {
+            hint = activeProviderId === "claude" ? "● active" : "";
+          } else {
+            hint = "○ not configured";
+          }
+          return {
+            name: hint ? `${p.displayName}  ${hint}` : p.displayName,
+            short: p.displayName,
+            value: p.id,
+          };
+        }),
+        new Separator(""),
+        {
+          name: `⚙  Manage MCP Servers (${mcpActiveCount}/${totalCount} active)`,
+          short: "Manage MCP Servers",
+          value: MANAGE_MCP_KEY,
+        },
+      ],
+    }));
   } catch (err) {
     if (isCancelled(err)) return null;
     throw err;
@@ -181,13 +360,20 @@ async function confirmAction(message: string): Promise<boolean> {
   }
 }
 
-function printSwitchResult(providerName: string, model: string | undefined, warnings: string[]): void {
+function printSwitchResult(providerName: string, model: string | undefined, result: SwitchResult, isNative: boolean): void {
   const target = model ? `${providerName} / ${model}` : providerName;
   console.log(`\n✔ Switched to ${target}`);
-  for (const w of warnings) {
+  for (const w of result.warnings) {
     console.log(w);
   }
+  if (result.cleanedMcps.length > 0) {
+    console.log(`  ✔ Removed ${result.cleanedMcps.length} managed MCP server(s): ${result.cleanedMcps.join(", ")}`);
+  }
   console.log("  Please restart Claude Code to apply");
+  console.log("  ⚠ Do NOT reuse the previous session — tool calls or parameters from the old provider may not be supported and will cause errors.");
+  if (!isNative) {
+    console.log("  💡 Tip: Some built-in tools may not work. Use \"Manage MCP Servers\" to add alternatives.");
+  }
 }
 
 async function selectSingleModelAction(
@@ -205,15 +391,16 @@ async function selectSingleModelAction(
         choices: [
           { name: `Switch to ${modelName}`, value: "switch" as const },
           { name: "🔑 Reconfigure API Key", value: RECONFIGURE_KEY },
-          { name: "🗑  Remove API Key", value: REMOVE_KEY },
+          { name: "🗑  Remove API Key (also removes related MCPs)", value: REMOVE_KEY },
         ],
       }, CLEAR));
 
       if (result === RECONFIGURE_KEY) {
         const newKey = await promptApiKeyLoop(apiKeyUrl);
         if (newKey) {
-          const updated = setProviderApiKey(config, providerId, newKey);
+          let updated = setProviderApiKey(config, providerId, newKey);
           await writeConfig(updated);
+          updated = await refreshMcpsForProvider(providerId, newKey, updated);
           config = updated;
           console.log("✔ API Key updated\n");
           await log("api-key-reconfigured", { provider: providerId });
@@ -222,8 +409,10 @@ async function selectSingleModelAction(
       }
 
       if (result === REMOVE_KEY) {
-        const updated = removeProviderApiKey(config, providerId);
+        let updated = removeProviderApiKey(config, providerId);
         await writeConfig(updated);
+        updated = await refreshMcpsForProvider(providerId, null, updated);
+        config = updated;
         console.log("✔ API Key removed\n");
         await log("api-key-removed", { provider: providerId });
         return null;
@@ -250,8 +439,9 @@ async function selectModel(
       const modelChoices = models.map((m) => {
         const isActive = m.name === currentActiveModel;
         const label = m.displayName ?? m.name;
+        const desc = m.description ? `  ${m.description.length > 30 ? m.description.slice(0, 30) + "…" : m.description}` : "";
         return {
-          name: isActive ? `${label}  ● active` : label,
+          name: isActive ? `${label}${desc}  ● active` : `${label}${desc}`,
           short: label,
           value: m.name,
         };
@@ -261,18 +451,21 @@ async function selectModel(
         loop: false,
         default: modelChoices[0].value,
         choices: [
-          ...modelChoices,
+          ...(providerId === "ark"
+            ? [new Separator("  Descriptions from Ark official docs — verify for your use case"), ...modelChoices]
+            : modelChoices),
           new Separator(""),
           { name: "🔑 Reconfigure API Key", value: RECONFIGURE_KEY },
-          { name: "🗑  Remove API Key", value: REMOVE_KEY },
+          { name: "🗑  Remove API Key (also removes related MCPs)", value: REMOVE_KEY },
         ],
       }, CLEAR));
 
       if (result === RECONFIGURE_KEY) {
         const newKey = await promptApiKeyLoop(apiKeyUrl);
         if (newKey) {
-          const updated = setProviderApiKey(config, providerId, newKey);
+          let updated = setProviderApiKey(config, providerId, newKey);
           await writeConfig(updated);
+          updated = await refreshMcpsForProvider(providerId, newKey, updated);
           config = updated;
           console.log("✔ API Key updated\n");
           await log("api-key-reconfigured", { provider: providerId });
@@ -281,8 +474,10 @@ async function selectModel(
       }
 
       if (result === REMOVE_KEY) {
-        const updated = removeProviderApiKey(config, providerId);
+        let updated = removeProviderApiKey(config, providerId);
         await writeConfig(updated);
+        updated = await refreshMcpsForProvider(providerId, null, updated);
+        config = updated;
         console.log("✔ API Key removed\n");
         await log("api-key-removed", { provider: providerId });
         return null;
