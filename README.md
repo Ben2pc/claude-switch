@@ -26,8 +26,8 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
 | Provider | Models |
 |---|---|
 | **Claude (Native)** | Default Anthropic API |
-| **Volcano Ark** | doubao-seed-2.0-code, doubao-seed-2.0-pro, deepseek-v3.2, kimi-k2.5, and more |
-| **Zhipu** | GLM-4.7, GLM-5.1, GLM-5, GLM-5-Turbo, GLM-4.5-Air |
+| **Volcano Ark** | doubao-seed-2.0-code, doubao-seed-2.0-pro, doubao-seed-2.0-lite, doubao-seed-code, minimax-m2.5, kimi-k2.5, glm-4.7, deepseek-v3.2, ark-code-latest |
+| **Zhipu** | GLM-5.1, GLM-5-Turbo, GLM-5 |
 | **MiniMax** | MiniMax-M2.7 |
 
 ## Install
@@ -71,7 +71,7 @@ Use the `⚙ Manage MCP Servers` entry in the main menu to enable/disable MCP se
 
 | MCP Server | Provider | Type | Description |
 |---|---|---|---|
-| zai-mcp-server | Zhipu | stdio/npx | Image analysis, video understanding |
+| zai-mcp-server | Zhipu | stdio/npx | Image analysis, video understanding, OCR |
 | web-search-prime | Zhipu | http | Web search |
 | web-reader | Zhipu | http | Web page reading |
 | zread | Zhipu | http | GitHub repo exploration |

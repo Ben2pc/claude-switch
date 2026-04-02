@@ -191,7 +191,7 @@ export function checkShellOverrides(): string[] {
 }
 
 /**
- * Remove all claude-switch managed MCP servers from settings.json.
+ * Remove all claude-switch managed MCP servers from ~/.claude.json.
  * Only removes MCPs listed in config.enabledMcps, preserving user-configured ones.
  */
 export async function cleanupManagedMcps(config: SwitchConfig): Promise<string[]> {

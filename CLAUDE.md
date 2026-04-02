@@ -12,16 +12,20 @@ npm link             # Install globally from local source
 claude-switch        # Run global CLI
 ```
 
-No test framework or linter is configured yet.
+```bash
+npm test             # vitest run
+npm run test:watch   # vitest (watch mode)
+```
 
 ## Architecture
 
 claude-switch modifies the `env` field in `~/.claude/settings.json` to redirect Claude Code to different API providers. It maintains its own config at `~/.claude-switch/config.json` for API key storage.
 
-### Two-file design
+### Three-file design
 
 - **`~/.claude/settings.json`** (target) — only the `env` field is touched; all other fields (permissions, plugins, etc.) are preserved
-- **`~/.claude-switch/config.json`** (self-managed) — stores per-provider API keys and native env backup; file mode 0600
+- **`~/.claude-switch/config.json`** (self-managed) — stores per-provider API keys, native env backup, and enabled MCP tracking; file mode 0600
+- **`~/.claude.json`** (shared with Claude Code) — MCP server configurations are written to the `mcpServers` field; other fields preserved
 
 ### Switch algorithm (switcher.ts)
 
@@ -38,7 +42,7 @@ Each provider implements `ProviderDefinition` with a `buildEnv(apiKey, model)` m
 
 ### TUI flow (index.ts)
 
-All inquirer prompts are wrapped with `withEsc()` for ESC-to-cancel. The main loop: select provider → input API key (if needed) → select model (multi-model) or confirm (single-model) → switch → exit. ESC at any level returns to the previous menu.
+All inquirer prompts are wrapped with `withEsc()` for ESC-to-cancel. The main loop: select provider → input API key (if needed) → select model (multi-model) or confirm (single-model) → switch → exit. The main menu also has a `⚙ Manage MCP Servers` entry for toggling MCP servers on/off. ESC at any level returns to the previous menu.
 
 **TUI language convention**: All user-facing strings in the TUI (prompts, labels, hints, descriptions) must be in English. This includes MCP display names, descriptions, provider hints, and model descriptions.
 
