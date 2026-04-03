@@ -33,16 +33,7 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
 ## Install
 
 ```bash
-npm install -g github:pangcheng1849/claude-switch
-```
-
-Or clone and link locally:
-
-```bash
-git clone https://github.com/pangcheng1849/claude-switch.git
-cd claude-switch
-npm install && npm run build
-npm link
+npm install -g @ben1849/claude-switch
 ```
 
 Then run:
