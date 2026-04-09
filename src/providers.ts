@@ -2,6 +2,7 @@ export interface ProviderModel {
   name: string;
   displayName?: string;
   description?: string;
+  default?: boolean;
 }
 
 export interface ProviderDefinition {
@@ -43,7 +44,7 @@ export const PROVIDERS: ProviderDefinition[] = [
     baseUrl: "https://ark.cn-beijing.volces.com/api/coding",
     apiKeyUrl: "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey",
     models: [
-      { name: "doubao-seed-2.0-code", displayName: "Doubao Seed 2.0 Code", description: "Multimodal. Frontend-focused, multi-language" },
+      { name: "doubao-seed-2.0-code", displayName: "Doubao Seed 2.0 Code", description: "Multimodal. Frontend-focused, multi-language", default: true },
       { name: "doubao-seed-2.0-pro", displayName: "Doubao Seed 2.0 Pro", description: "Multimodal. Flagship, complex reasoning" },
       { name: "doubao-seed-2.0-lite", displayName: "Doubao Seed 2.0 Lite", description: "Multimodal. Balanced quality & speed" },
       { name: "doubao-seed-code", displayName: "Doubao Seed Code", description: "Multimodal. Code generation & scheduling" },
@@ -66,7 +67,7 @@ export const PROVIDERS: ProviderDefinition[] = [
     baseUrl: "https://open.bigmodel.cn/api/anthropic",
     apiKeyUrl: "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
     models: [
-      { name: "GLM-5.1" },
+      { name: "GLM-5.1", default: true },
       { name: "GLM-5-Turbo" },
       { name: "GLM-5" },
     ],
@@ -87,7 +88,7 @@ export const PROVIDERS: ProviderDefinition[] = [
     displayName: "MiniMax",
     baseUrl: "https://api.minimaxi.com/anthropic",
     apiKeyUrl: "https://platform.minimaxi.com",
-    models: [{ name: "MiniMax-M2.7" }],
+    models: [{ name: "MiniMax-M2.7", default: true }],
     buildEnv(apiKey, model) {
       return {
         ANTHROPIC_BASE_URL: this.baseUrl,

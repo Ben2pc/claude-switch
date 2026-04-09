@@ -2,6 +2,7 @@ export interface ProviderModel {
     name: string;
     displayName?: string;
     description?: string;
+    default?: boolean;
 }
 export interface ProviderDefinition {
     id: string;
