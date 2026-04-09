@@ -7,6 +7,7 @@ import { readConfig, writeConfig, getProviderApiKey, setProviderApiKey, removePr
 import { readMcpServers, writeMcpServers } from "./settings.js";
 import { detectActiveProvider, detectActiveModel, getActiveBaseUrl, switchProvider } from "./switcher.js";
 import { log } from "./logger.js";
+import { parseArgs, printVersion, printHelp, runList, runQuickSwitch } from "./cli.js";
 const RECONFIGURE_KEY = "__reconfigure_api_key__";
 const REMOVE_KEY = "__remove_api_key__";
 const MANAGE_MCP_KEY = "__manage_mcp__";
@@ -446,7 +447,32 @@ async function selectModel(providerName, models, apiKeyUrl, config, providerId, 
         }
     }
 }
-main().catch((err) => {
-    console.error("Error:", err);
-    process.exit(1);
-});
+const command = parseArgs(process.argv);
+if (command) {
+    if (command.type === "help") {
+        printHelp();
+    }
+    else if (command.type === "version") {
+        printVersion();
+    }
+    else {
+        (async () => {
+            if (command.type === "list") {
+                await runList();
+            }
+            else {
+                const code = await runQuickSwitch(command.providerId, command.model);
+                process.exit(code);
+            }
+        })().catch((err) => {
+            console.error("Error:", err);
+            process.exit(1);
+        });
+    }
+}
+else {
+    main().catch((err) => {
+        console.error("Error:", err);
+        process.exit(1);
+    });
+}

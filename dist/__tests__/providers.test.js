@@ -92,6 +92,12 @@ describe("provider constraints", () => {
             expect(p.models.length).toBeGreaterThanOrEqual(1);
         }
     });
+    it("all non-Claude providers have exactly one default model", () => {
+        for (const p of PROVIDERS.filter((p) => p.id !== "claude")) {
+            const defaults = p.models.filter((m) => m.default);
+            expect(defaults).toHaveLength(1);
+        }
+    });
     it("all non-Claude providers have apiKeyUrl set", () => {
         for (const p of PROVIDERS.filter((p) => p.id !== "claude")) {
             expect(p.apiKeyUrl.length).toBeGreaterThan(0);

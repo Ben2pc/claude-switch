@@ -1,0 +1,303 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+// --- Mock dependencies ---
+const mockReadConfig = vi.fn();
+const mockWriteConfig = vi.fn();
+vi.mock("../config.js", async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        readConfig: (...args) => mockReadConfig(...args),
+        writeConfig: (...args) => mockWriteConfig(...args),
+    };
+});
+const mockReadSettings = vi.fn();
+const mockWriteSettings = vi.fn();
+const mockReadMcpServers = vi.fn();
+const mockWriteMcpServers = vi.fn();
+vi.mock("../settings.js", async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        readSettings: (...args) => mockReadSettings(...args),
+        writeSettings: (...args) => mockWriteSettings(...args),
+        readMcpServers: (...args) => mockReadMcpServers(...args),
+        writeMcpServers: (...args) => mockWriteMcpServers(...args),
+    };
+});
+const mockLog = vi.fn();
+vi.mock("../logger.js", () => ({
+    log: (...args) => mockLog(...args),
+}));
+import { parseArgs, printVersion, printHelp, runList, runQuickSwitch } from "../cli.js";
+beforeEach(() => {
+    vi.clearAllMocks();
+    mockWriteConfig.mockResolvedValue(undefined);
+    mockWriteSettings.mockResolvedValue(undefined);
+    mockWriteMcpServers.mockResolvedValue(undefined);
+    mockLog.mockResolvedValue(undefined);
+});
+// ============================================================
+// parseArgs
+// ============================================================
+describe("parseArgs", () => {
+    it("returns null for no arguments (TUI mode)", () => {
+        expect(parseArgs(["node", "claude-switch"])).toBeNull();
+    });
+    it("parses 'list' command", () => {
+        expect(parseArgs(["node", "claude-switch", "list"])).toEqual({
+            type: "list",
+        });
+    });
+    it("parses provider-only switch command", () => {
+        expect(parseArgs(["node", "claude-switch", "ark"])).toEqual({
+            type: "switch",
+            providerId: "ark",
+            model: undefined,
+        });
+    });
+    it("parses provider + model switch command", () => {
+        expect(parseArgs(["node", "claude-switch", "ark", "doubao-seed-2.0-code"])).toEqual({
+            type: "switch",
+            providerId: "ark",
+            model: "doubao-seed-2.0-code",
+        });
+    });
+    it("parses 'claude' as provider for switching to native", () => {
+        expect(parseArgs(["node", "claude-switch", "claude"])).toEqual({
+            type: "switch",
+            providerId: "claude",
+            model: undefined,
+        });
+    });
+    it("ignores extra arguments beyond model", () => {
+        expect(parseArgs(["node", "claude-switch", "ark", "doubao-seed-2.0-code", "extra"])).toEqual({
+            type: "switch",
+            providerId: "ark",
+            model: "doubao-seed-2.0-code",
+        });
+    });
+    it("parses '--help' flag", () => {
+        expect(parseArgs(["node", "claude-switch", "--help"])).toEqual({
+            type: "help",
+        });
+    });
+    it("parses '-h' flag", () => {
+        expect(parseArgs(["node", "claude-switch", "-h"])).toEqual({
+            type: "help",
+        });
+    });
+    it("parses '--version' flag", () => {
+        expect(parseArgs(["node", "claude-switch", "--version"])).toEqual({
+            type: "version",
+        });
+    });
+    it("parses '-v' flag", () => {
+        expect(parseArgs(["node", "claude-switch", "-v"])).toEqual({
+            type: "version",
+        });
+    });
+});
+// ============================================================
+// printVersion
+// ============================================================
+describe("printVersion", () => {
+    it("prints version string", () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        printVersion();
+        const output = logs.join("\n");
+        expect(output).toMatch(/\d+\.\d+\.\d+/);
+        vi.restoreAllMocks();
+    });
+});
+// ============================================================
+// printHelp
+// ============================================================
+describe("printHelp", () => {
+    it("prints usage info with available commands", () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        printHelp();
+        const output = logs.join("\n");
+        expect(output).toContain("Usage:");
+        expect(output).toContain("claude-switch");
+        expect(output).toContain("<provider>");
+        expect(output).toContain("list");
+        expect(output).toContain("--help");
+        vi.restoreAllMocks();
+    });
+});
+// ============================================================
+// runList
+// ============================================================
+describe("runList", () => {
+    it("lists all providers with status", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({
+            providers: { ark: { apiKey: "test-key" } },
+        });
+        mockReadSettings.mockResolvedValue({
+            env: {
+                ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/coding",
+                ANTHROPIC_MODEL: "doubao-seed-2.0-code",
+            },
+        });
+        await runList();
+        const output = logs.join("\n");
+        // Active provider shows active indicator
+        expect(output).toContain("ark");
+        expect(output).toContain("active");
+        // Configured providers show configured
+        // Non-configured providers show not configured
+        expect(output).toContain("claude");
+        expect(output).toContain("zhipu");
+        vi.restoreAllMocks();
+    });
+    it("shows current model for active provider", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({
+            providers: { ark: { apiKey: "test-key" } },
+        });
+        mockReadSettings.mockResolvedValue({
+            env: {
+                ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/coding",
+                ANTHROPIC_MODEL: "doubao-seed-2.0-code",
+            },
+        });
+        await runList();
+        const output = logs.join("\n");
+        expect(output).toContain("doubao-seed-2.0-code");
+        vi.restoreAllMocks();
+    });
+});
+// ============================================================
+// runQuickSwitch
+// ============================================================
+describe("runQuickSwitch", () => {
+    it("switches to a provider with saved API key", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({
+            providers: { ark: { apiKey: "test-key" } },
+        });
+        mockReadSettings.mockResolvedValue({});
+        mockReadMcpServers.mockResolvedValue({});
+        const code = await runQuickSwitch("ark", "doubao-seed-2.0-code");
+        expect(code).toBe(0);
+        expect(mockWriteSettings).toHaveBeenCalled();
+        const output = logs.join("\n");
+        expect(output).toContain("Switched to");
+        expect(output).toContain("Volcano Ark");
+        expect(output).toContain("doubao-seed-2.0-code");
+        vi.restoreAllMocks();
+    });
+    it("returns error for unknown provider", async () => {
+        const errors = [];
+        vi.spyOn(console, "error").mockImplementation((...args) => {
+            errors.push(args.join(" "));
+        });
+        vi.spyOn(console, "log").mockImplementation(() => { });
+        const code = await runQuickSwitch("nonexistent");
+        expect(code).toBe(1);
+        const output = errors.join("\n");
+        expect(output).toContain("nonexistent");
+        vi.restoreAllMocks();
+    });
+    it("returns error when no API key is configured", async () => {
+        const errors = [];
+        vi.spyOn(console, "error").mockImplementation((...args) => {
+            errors.push(args.join(" "));
+        });
+        vi.spyOn(console, "log").mockImplementation(() => { });
+        mockReadConfig.mockResolvedValue({});
+        const code = await runQuickSwitch("ark", "doubao-seed-2.0-code");
+        expect(code).toBe(1);
+        const output = errors.join("\n");
+        expect(output).toContain("API key");
+        // Should suggest using TUI
+        expect(output).toContain("claude-switch");
+        vi.restoreAllMocks();
+    });
+    it("returns error for invalid model name", async () => {
+        const errors = [];
+        vi.spyOn(console, "error").mockImplementation((...args) => {
+            errors.push(args.join(" "));
+        });
+        vi.spyOn(console, "log").mockImplementation(() => { });
+        mockReadConfig.mockResolvedValue({
+            providers: { ark: { apiKey: "test-key" } },
+        });
+        const code = await runQuickSwitch("ark", "invalid-model");
+        expect(code).toBe(1);
+        const output = errors.join("\n");
+        expect(output).toContain("invalid-model");
+        // Should list valid models
+        expect(output).toContain("doubao-seed-2.0-code");
+        vi.restoreAllMocks();
+    });
+    it("switches to claude native without API key", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({});
+        mockReadSettings.mockResolvedValue({
+            env: {
+                ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/coding",
+                ANTHROPIC_MODEL: "doubao-seed-2.0-code",
+            },
+        });
+        mockReadMcpServers.mockResolvedValue({});
+        const code = await runQuickSwitch("claude");
+        expect(code).toBe(0);
+        const output = logs.join("\n");
+        expect(output).toContain("Claude (Native)");
+        vi.restoreAllMocks();
+    });
+    it("uses default model when no model specified", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({
+            providers: { ark: { apiKey: "test-key" } },
+        });
+        mockReadSettings.mockResolvedValue({});
+        mockReadMcpServers.mockResolvedValue({});
+        const code = await runQuickSwitch("ark");
+        expect(code).toBe(0);
+        // Should use first model (doubao-seed-2.0-code)
+        expect(mockWriteSettings).toHaveBeenCalled();
+        const output = logs.join("\n");
+        expect(output).toContain("doubao-seed-2.0-code");
+        vi.restoreAllMocks();
+    });
+    it("handles single-model provider without explicit model", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({
+            providers: { minimax: { apiKey: "test-key" } },
+        });
+        mockReadSettings.mockResolvedValue({});
+        mockReadMcpServers.mockResolvedValue({});
+        const code = await runQuickSwitch("minimax");
+        expect(code).toBe(0);
+        const output = logs.join("\n");
+        expect(output).toContain("MiniMax-M2.7");
+        vi.restoreAllMocks();
+    });
+});
