@@ -1,7 +1,7 @@
-import { input, select, confirm, editor, Separator } from "@inquirer/prompts";
+import { input, select, confirm, editor, password, Separator } from "@inquirer/prompts";
 import { CancelPromptError, ExitPromptError } from "@inquirer/core";
 import { PROVIDERS } from "./providers.js";
-import { readConfig, writeConfig, addCustomProvider, updateCustomProvider, removeCustomProvider, removeProviderApiKey, } from "./config.js";
+import { readConfig, writeConfig, addCustomProvider, updateCustomProvider, removeCustomProvider, removeProviderApiKey, setProviderApiKey, } from "./config.js";
 import { log } from "./logger.js";
 const ESC_BYTE = "\x1b";
 const CLEAR = { clearPromptOnDone: true };
@@ -99,6 +99,30 @@ async function promptModels() {
     return models;
 }
 /**
+ * Prompt for API key (required, loop until non-empty).
+ */
+async function promptApiKey() {
+    while (true) {
+        try {
+            const key = await withEsc(password({
+                message: "Enter API Key",
+                mask: "*",
+            }, CLEAR));
+            const trimmed = key?.trim() ?? "";
+            if (trimmed.length === 0) {
+                console.log("  API Key cannot be empty, please try again.");
+                continue;
+            }
+            return trimmed;
+        }
+        catch (err) {
+            if (isCancelled(err))
+                return null;
+            throw err;
+        }
+    }
+}
+/**
  * Prompt for env vars.
  */
 async function promptEnvVars() {
@@ -191,11 +215,15 @@ async function addCustomProviderWizard(config) {
         const models = await promptModels();
         if (models === null)
             return null;
-        // 5. Env Vars
+        // 5. API Key
+        const apiKey = await promptApiKey();
+        if (apiKey === null)
+            return null;
+        // 6. Env Vars
         const envVars = await promptEnvVars();
         if (envVars === null)
             return null;
-        // 6. Summary
+        // 7. Summary
         const cp = {
             id: id.trim(),
             displayName: displayName.trim(),
@@ -215,7 +243,8 @@ async function addCustomProviderWizard(config) {
         const ok = await withEsc(confirm({ message: "Save this provider?", default: true }, CLEAR));
         if (!ok)
             return null;
-        const updated = addCustomProvider(config, cp);
+        let updated = addCustomProvider(config, cp);
+        updated = setProviderApiKey(updated, cp.id, apiKey);
         await writeConfig(updated);
         await log("custom-provider-added", { id: cp.id, displayName: cp.displayName });
         console.log(`✔ Provider "${cp.displayName}" added\n`);
