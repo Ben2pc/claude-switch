@@ -1,4 +1,4 @@
-import { input, select, confirm, editor, password, Separator } from "@inquirer/prompts";
+import { input, select, confirm, password, Separator } from "@inquirer/prompts";
 import { CancelPromptError, ExitPromptError } from "@inquirer/core";
 import { PROVIDERS } from "./providers.js";
 import { readConfig, writeConfig, addCustomProvider, updateCustomProvider, removeCustomProvider, removeProviderApiKey, setProviderApiKey, } from "./config.js";
@@ -136,16 +136,22 @@ async function promptEnvVars() {
         }, CLEAR));
         if (method === "default")
             return undefined;
-        const raw = await withEsc(editor({
-            message: "Paste env JSON (ANTHROPIC_AUTH_TOKEN and ANTHROPIC_MODEL will be auto-replaced with placeholders)",
-            default: JSON.stringify({ ANTHROPIC_BASE_URL: "", ANTHROPIC_AUTH_TOKEN: "{{API_KEY}}", ANTHROPIC_MODEL: "{{MODEL}}" }, null, 2),
-        }));
+        const raw = await withEsc(input({
+            message: "Paste env JSON",
+            validate: (v) => {
+                try {
+                    const parsed = JSON.parse(v.trim());
+                    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+                        return "Must be a JSON object";
+                    return true;
+                }
+                catch {
+                    return "Invalid JSON";
+                }
+            },
+        }, CLEAR));
         try {
             let parsed = JSON.parse(raw);
-            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-                console.log("  Error: must be a JSON object");
-                return null;
-            }
             // Unwrap if user pasted { "env": { ... } } format
             if (parsed.env && typeof parsed.env === "object" && !Array.isArray(parsed.env)) {
                 parsed = parsed.env;
@@ -256,10 +262,20 @@ async function addCustomProviderWizard(config) {
         let env;
         if (method === "json") {
             // Paste JSON path
-            const raw = await withEsc(editor({
-                message: "Paste env JSON (ANTHROPIC_AUTH_TOKEN and ANTHROPIC_MODEL will be extracted automatically)",
-                default: JSON.stringify({ ANTHROPIC_BASE_URL: "", ANTHROPIC_AUTH_TOKEN: "", ANTHROPIC_MODEL: "" }, null, 2),
-            }));
+            const raw = await withEsc(input({
+                message: "Paste env JSON",
+                validate: (v) => {
+                    try {
+                        const parsed = JSON.parse(v.trim());
+                        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+                            return "Must be a JSON object";
+                        return true;
+                    }
+                    catch {
+                        return "Invalid JSON";
+                    }
+                },
+            }, CLEAR));
             const result = parseEnvJson(raw);
             if (result === null)
                 return null;
