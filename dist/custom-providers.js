@@ -178,6 +178,55 @@ async function promptEnvVars() {
     }
 }
 /**
+ * Parse pasted env JSON, extract API key and env template.
+ * Returns { apiKey, env } or null on error.
+ */
+function parseEnvJson(raw) {
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    }
+    catch {
+        console.log("  Error: invalid JSON");
+        return null;
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        console.log("  Error: must be a JSON object");
+        return null;
+    }
+    // Unwrap { "env": { ... } } format
+    if (parsed.env && typeof parsed.env === "object" && !Array.isArray(parsed.env)) {
+        parsed = parsed.env;
+    }
+    for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value !== "string") {
+            console.log(`  Error: value for "${key}" must be a string, got ${typeof value}`);
+            return null;
+        }
+    }
+    const env = parsed;
+    // Extract API key before replacing with placeholder
+    const apiKey = env.ANTHROPIC_AUTH_TOKEN;
+    if (!apiKey || apiKey === "{{API_KEY}}") {
+        console.log("  Error: ANTHROPIC_AUTH_TOKEN is required in JSON");
+        return null;
+    }
+    // Extract base URL
+    const baseUrl = env.ANTHROPIC_BASE_URL;
+    // Extract model as a model entry
+    const modelName = env.ANTHROPIC_MODEL;
+    const models = [];
+    if (modelName && modelName !== "{{MODEL}}") {
+        models.push({ name: modelName, default: true });
+    }
+    // Replace known values with placeholders
+    env.ANTHROPIC_AUTH_TOKEN = "{{API_KEY}}";
+    if (env.ANTHROPIC_MODEL) {
+        env.ANTHROPIC_MODEL = "{{MODEL}}";
+    }
+    return { apiKey, env, baseUrl, models: models.length > 0 ? models : undefined };
+}
+/**
  * Add custom provider wizard.
  */
 async function addCustomProviderWizard(config) {
@@ -193,28 +242,64 @@ async function addCustomProviderWizard(config) {
             message: "Display name",
             validate: (v) => v.trim().length > 0 || "Cannot be empty",
         }, CLEAR));
-        // 3. Base URL
-        const baseUrl = await withEsc(input({
-            message: "API base URL",
-            validate: (v) => validateBaseUrl(v.trim()),
+        // 3. Choose input method
+        const method = await withEsc(select({
+            message: "How to configure the provider?",
+            choices: [
+                { name: "Enter API Key (uses default env: BASE_URL + AUTH_TOKEN + MODEL)", value: "interactive" },
+                { name: "Paste env JSON (full customization)", value: "json" },
+            ],
         }, CLEAR));
-        // 4. Models
-        const models = await promptModels();
-        if (models === null)
-            return null;
-        // 5. API Key
-        const apiKey = await promptApiKey();
-        if (apiKey === null)
-            return null;
-        // 6. env
-        const env = await promptEnvVars();
-        if (env === null)
-            return null;
-        // 7. Summary
+        let baseUrl;
+        let models;
+        let apiKey;
+        let env;
+        if (method === "json") {
+            // Paste JSON path
+            const raw = await withEsc(editor({
+                message: "Paste env JSON (ANTHROPIC_AUTH_TOKEN and ANTHROPIC_MODEL will be extracted automatically)",
+                default: JSON.stringify({ ANTHROPIC_BASE_URL: "", ANTHROPIC_AUTH_TOKEN: "", ANTHROPIC_MODEL: "" }, null, 2),
+            }));
+            const result = parseEnvJson(raw);
+            if (result === null)
+                return null;
+            apiKey = result.apiKey;
+            env = result.env;
+            baseUrl = result.baseUrl ?? "";
+            models = result.models ?? [];
+            if (!baseUrl) {
+                console.log("  Error: ANTHROPIC_BASE_URL is required in JSON");
+                return null;
+            }
+            // If no model extracted, ask for at least one
+            if (models.length === 0) {
+                const promptedModels = await promptModels();
+                if (promptedModels === null)
+                    return null;
+                models = promptedModels;
+            }
+        }
+        else {
+            // Interactive path
+            const baseUrlInput = await withEsc(input({
+                message: "API base URL",
+                validate: (v) => validateBaseUrl(v.trim()),
+            }, CLEAR));
+            baseUrl = baseUrlInput.trim();
+            const promptedModels = await promptModels();
+            if (promptedModels === null)
+                return null;
+            models = promptedModels;
+            const promptedKey = await promptApiKey();
+            if (promptedKey === null)
+                return null;
+            apiKey = promptedKey;
+        }
+        // Summary
         const cp = {
             id: id.trim(),
             displayName: displayName.trim(),
-            baseUrl: baseUrl.trim(),
+            baseUrl,
         };
         if (models.length > 0)
             cp.models = models;
@@ -224,8 +309,8 @@ async function addCustomProviderWizard(config) {
         console.log(`    ID:       ${cp.id}`);
         console.log(`    Name:     ${cp.displayName}`);
         console.log(`    Base URL: ${cp.baseUrl}`);
-        console.log(`    Models:   ${models.length > 0 ? models.map((m) => m.name).join(", ") : "(none)"}`);
-        console.log(`    env: ${env ? "custom" : "default"}`);
+        console.log(`    Models:   ${models.map((m) => m.name).join(", ")}`);
+        console.log(`    env:      ${env ? "custom" : "default"}`);
         console.log("");
         const ok = await withEsc(confirm({ message: "Save this provider?", default: true }, CLEAR));
         if (!ok)
