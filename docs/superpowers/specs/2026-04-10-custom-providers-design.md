@@ -1,16 +1,16 @@
-# Custom Providers Design
+# 自定义 Provider 设计
 
-## Problem
+## 问题
 
-Providers are hardcoded in `src/providers.ts`. Users who want to connect Claude Code to a custom proxy or new API provider must fork the repo and modify source code.
+Provider 目前硬编码在 `src/providers.ts` 中。用户想接入自定义代理或新的 API 服务商时，必须 fork 仓库并修改源码。
 
-## Goal
+## 目标
 
-Allow users to define custom providers via TUI or config file, with the same switch experience as built-in providers.
+允许用户通过 TUI 或直接编辑配置文件来定义自定义 provider，获得与内置 provider 一致的切换体验。
 
-## Data Model
+## 数据模型
 
-Custom providers are stored in `~/.claude-switch/config.json` under `customProviders`:
+自定义 provider 存储在 `~/.claude-switch/config.json` 的 `customProviders` 字段中：
 
 ```json
 {
@@ -34,19 +34,19 @@ Custom providers are stored in `~/.claude-switch/config.json` under `customProvi
 }
 ```
 
-### Fields
+### 字段说明
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `id` | Yes | Unique identifier, used for CLI quick-switch. Must not conflict with built-in provider IDs. |
-| `displayName` | Yes | Shown in TUI menu. |
-| `baseUrl` | Yes | API base URL. Also used for provider detection in `switcher.ts`. |
-| `models` | No | Array of `{ name, displayName?, description?, default? }`. Omit for single-model providers where model selection is unnecessary. |
-| `envVars` | No | Explicit env var mapping written to `~/.claude/settings.json`. Supports `{{API_KEY}}` and `{{MODEL}}` placeholders for runtime substitution. |
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `id` | 是 | 唯一标识符，用于 CLI quick-switch。不能与内置 provider ID 或保留词（`list`、`help`）冲突。 |
+| `displayName` | 是 | TUI 菜单中显示的名称。 |
+| `baseUrl` | 是 | API 基础 URL。也用于 `switcher.ts` 中的 provider 检测。 |
+| `models` | 否 | `{ name, displayName?, description?, default? }` 数组。省略时表示无需模型选择。 |
+| `envVars` | 否 | 显式 env 映射，直接写入 `~/.claude/settings.json`。支持 `{{API_KEY}}` 和 `{{MODEL}}` 占位符做运行时替换。 |
 
-### Default env behavior
+### 默认 env 行为
 
-When `envVars` is omitted, the following default template is used:
+当 `envVars` 省略时，使用默认三件套模板：
 
 ```json
 {
@@ -56,18 +56,20 @@ When `envVars` is omitted, the following default template is used:
 }
 ```
 
-### Placeholder substitution
+### 占位符替换
 
-- `{{API_KEY}}` → the stored API key for this provider
-- `{{MODEL}}` → the selected model name
+- `{{API_KEY}}` → 该 provider 已存储的 API Key
+- `{{MODEL}}` → 用户选择的模型名称
 
-Values without placeholders are written as-is (e.g., `"API_TIMEOUT_MS": "3000000"`).
+不含占位符的值原样写入（如 `"API_TIMEOUT_MS": "3000000"`）。
 
-## Provider Unification
+## Provider 统一化
 
-### `getAllProviders()` function
+### `getAllProviders()` 函数
 
-New function in `providers.ts` that merges built-in `PROVIDERS` with custom providers from config:
+在 `providers.ts` 中新增函数，合并内置 `PROVIDERS` 与配置中的自定义 provider，返回统一的 `ProviderDefinition[]`。
+
+自定义 provider 的 `buildEnv()` 根据 `envVars` 配置（或默认模板）进行占位符替换：
 
 ```typescript
 function buildEnvFromConfig(
@@ -85,91 +87,85 @@ function buildEnvFromConfig(
 }
 ```
 
-Custom provider definitions are converted to `ProviderDefinition` with a generated `buildEnv()` that performs placeholder substitution.
+### 需要更新的消费方
 
-### Consumers to update
+所有直接引用 `PROVIDERS` 数组的代码改为调用 `getAllProviders()`：
 
-All code that references the `PROVIDERS` array directly needs to use `getAllProviders()` instead:
-
-- `src/index.ts` — TUI main menu, provider lookup
-- `src/cli.ts` — `runList()`, `runQuickSwitch()`, `printHelp()`
+- `src/index.ts` — TUI 主菜单、provider 查找
+- `src/cli.ts` — `runList()`、`runQuickSwitch()`、`printHelp()`
 - `src/switcher.ts` — `detectActiveProviderFromSettings()`
 
-Since `getAllProviders()` requires reading config (async), the call sites need to pass config or call it at the appropriate point.
+由于 `getAllProviders()` 需要读取 config（异步），调用方需要在合适的时机传入 config 或调用此函数。
 
-## TUI Design
+## TUI 设计
 
-### Main menu
+### 主菜单
 
-Custom providers appear after built-in providers, before the separator:
+自定义 provider 排在内置 provider 之后、分隔线之前：
 
 ```
   Claude (Native)      ● active
   Volcano Ark          ○ not configured
   Zhipu                ○ not configured
   MiniMax              ○ not configured
-  My Proxy             ○ not configured        ← custom
+  My Proxy             ○ not configured        ← 自定义
   ──────────────────
   ⚙  Manage MCP Servers (0/5 active)
-  ⚙  Manage Custom Providers                   ← new entry
+  ⚙  Manage Custom Providers                   ← 新入口
 ```
 
-Custom providers use the same switch flow as built-in providers (API key input → model selection → switch).
+自定义 provider 使用与内置相同的切换流程（输入 API Key → 选择模型 → 切换）。
 
-### Manage Custom Providers submenu
+### Manage Custom Providers 子菜单
 
 ```
   + Add Provider
   ──────────────
-  My Proxy                                     ← existing custom
+  My Proxy                                     ← 已有的自定义 provider
   Another One
 ```
 
-- Select existing → edit/delete submenu
-- ESC → return to main menu
+- 选择已有 provider → 进入编辑/删除子菜单
+- ESC → 返回主菜单
 
-### Add Provider flow
+### Add Provider 流程
 
-Sequential prompts:
+逐步问答：
 
-1. **Provider ID** — text input, validated: no spaces, no conflict with built-in IDs
-2. **Display Name** — text input
-3. **Base URL** — text input, validated: starts with `http://` or `https://`
-4. **Models** — loop: add model (name, displayName?, description?, default?), or finish
-5. **Env Vars** — select input method:
-   - "Use default (3 vars)" → skip, use default template
-   - "Key-value pairs" → loop: select/input key, input value, or finish
-   - "Paste JSON" → multi-line text input, parsed as JSON object
-6. **Confirm** — show summary, save on confirm
+1. **Provider ID** — 文本输入，校验：无空格，不与内置 ID 或保留词冲突
+2. **Display Name** — 文本输入
+3. **Base URL** — 文本输入，校验：以 `http://` 或 `https://` 开头
+4. **Models** — 循环：添加模型（name、displayName?、description?、default?），或结束
+5. **Env Vars** — 选择输入方式：
+   - 「Use default (3 vars)」→ 跳过，使用默认模板
+   - 「Key-value pairs」→ 逐条输入 key 和 value，循环直到结束
+   - 「Paste JSON」→ 粘贴一段 JSON 对象，解析校验
+6. **Confirm** — 显示摘要，确认后保存
 
 ### Edit Provider
 
-List all fields, user selects which to modify. Same input methods as add flow for each field.
+列出所有字段让用户选择要修改哪个，对应字段使用与添加流程相同的输入方式。
 
 ### Delete Provider
 
-Confirmation prompt → remove from `customProviders` + remove stored API key.
+确认提示 → 从 `customProviders` 移除，同时清理已存的 API Key。
 
-## CLI
+## CLI 兼容
 
-- `claude-switch list` — includes custom providers in output
-- `claude-switch <custom-id> [model]` — quick-switch works with custom provider IDs
-- `claude-switch --help` — dynamically lists all provider IDs (built-in + custom)
+- `claude-switch list` — 输出包含自定义 provider
+- `claude-switch <custom-id> [model]` — quick-switch 支持自定义 provider ID
+- `claude-switch --help` — 动态列出所有 provider ID（内置 + 自定义）
 
-## Constraints
+## 约束
 
-- Built-in providers are not editable or deletable
-- Custom providers do not support MCP association (MCP management remains built-in only)
-- No import/export/sharing of provider configs
-- No validation of envVars correctness (user responsibility)
-- Custom provider IDs must not conflict with built-in IDs or reserved words (`list`, `help`)
-- `apiKeyUrl` is not supported for custom providers; API key prompt uses generic message
+- 内置 provider 不可编辑、不可删除
+- 自定义 provider 不支持 MCP 关联（MCP 管理仍仅限内置 provider）
+- 不做 provider 导入/导出/分享
+- 不校验 envVars 的正确性（用户自行负责）
+- 自定义 provider 不支持 `apiKeyUrl`，API Key 提示使用通用文案
 
-## MANAGED_ENV_KEYS impact
+## MANAGED_ENV_KEYS 影响
 
-Custom providers may write env keys not in the current `MANAGED_ENV_KEYS` list. Two options:
+自定义 provider 可能写入不在当前 `MANAGED_ENV_KEYS` 列表中的 env key。
 
-1. **Dynamic**: merge custom provider env keys into the managed set at runtime
-2. **Static**: only clean known keys, custom keys persist
-
-Approach: **Dynamic**. When building the full provider list, collect all env keys from custom provider `envVars` and union them with the static `MANAGED_ENV_KEYS`. This ensures clean switching between any providers.
+策略：**动态合并**。构建完整 provider 列表时，收集所有自定义 provider `envVars` 中的 key，与静态 `MANAGED_ENV_KEYS` 取并集。确保在任意 provider 之间切换时都能清理干净。
