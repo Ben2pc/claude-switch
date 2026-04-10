@@ -42,7 +42,7 @@ Provider 目前硬编码在 `src/providers.ts` 中。用户想接入自定义代
 | `displayName` | 是 | TUI 菜单中显示的名称。 |
 | `baseUrl` | 是 | API 基础 URL。也用于 `switcher.ts` 中的 provider 检测。 |
 | `models` | 是（TUI 添加时至少 1 个） | `{ name, displayName?, description?, default? }` 数组。 |
-| `env` | 否 | 显式 env 映射，直接写入 `~/.claude/settings.json`。支持 `{{API_KEY}}` 和 `{{MODEL}}` 占位符做运行时替换。 |
+| `env` | 否 | 显式 env 映射，直接写入 `~/.claude/settings.json`。值类型为 `string \| number`。string 值支持 `{{API_KEY}}` 和 `{{MODEL}}` 占位符做运行时替换，number 值原样写入。 |
 
 ### 默认 env 行为
 
@@ -61,7 +61,7 @@ Provider 目前硬编码在 `src/providers.ts` 中。用户想接入自定义代
 - `{{API_KEY}}` → 该 provider 已存储的 API Key
 - `{{MODEL}}` → 用户选择的模型名称
 
-不含占位符的值原样写入（如 `"API_TIMEOUT_MS": "3000000"`）。
+不含占位符的 string 值原样写入（如 `"API_TIMEOUT_MS": "3000000"`）。number 值也原样写入（如 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: 1`）。`ANTHROPIC_BASE_URL` 会被强制设为 provider 的 `baseUrl`。
 
 ## Provider 统一化
 
@@ -73,16 +73,22 @@ Provider 目前硬编码在 `src/providers.ts` 中。用户想接入自定义代
 
 ```typescript
 function buildEnvFromConfig(
-  env: Record<string, string>,
+  env: Record<string, string | number>,
   apiKey: string,
   model: string,
 ): Record<string, string | number> {
   const result: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(env)) {
-    result[key] = value
-      .replace(/\{\{API_KEY\}\}/g, apiKey)
-      .replace(/\{\{MODEL\}\}/g, model);
+    if (typeof value === "string") {
+      result[key] = value
+        .replace(/\{\{API_KEY\}\}/g, apiKey)
+        .replace(/\{\{MODEL\}\}/g, model);
+    } else {
+      result[key] = value;
+    }
   }
+  // Force ANTHROPIC_BASE_URL to match baseUrl
+  result.ANTHROPIC_BASE_URL = baseUrl;
   return result;
 }
 ```
@@ -134,13 +140,10 @@ function buildEnvFromConfig(
 
 1. **Provider ID** — 文本输入，校验：无空格，不与内置 ID 或保留词冲突
 2. **Display Name** — 文本输入
-3. **Base URL** — 文本输入，校验：以 `http://` 或 `https://` 开头
-4. **Models** — 至少添加一个模型（name、displayName?、description?、default?），可循环添加更多
-5. **API Key** — 密码输入，必填
-6. **env** — 选择输入方式：
-   - 「Use default (3 vars)」→ 跳过，使用默认模板
-   - 「Paste JSON」→ 粘贴一段 JSON 对象，解析校验
-7. **Confirm** — 显示摘要，确认后保存
+3. **选择配置方式**：
+   - **Enter API Key（交互式）**→ Base URL → Models（至少 1 个）→ API Key → 使用默认三件套 env
+   - **Paste env JSON** → 粘贴完整 env JSON（支持多行，自动提取 baseUrl/API Key/model，`ANTHROPIC_AUTH_TOKEN` 和 `ANTHROPIC_MODEL` 自动替换为占位符，number 值保留）→ 可选添加更多 models
+4. **Confirm** — 显示摘要，确认后保存
 
 ### Edit Provider
 
@@ -154,7 +157,7 @@ function buildEnvFromConfig(
 
 - `claude-switch list` — 输出包含自定义 provider
 - `claude-switch <custom-id> [model]` — quick-switch 支持自定义 provider ID
-- `claude-switch --help` — 动态列出所有 provider ID（内置 + 自定义）
+- `claude-switch --help` — 列出内置 provider ID，提示自定义 provider 可通过 TUI 添加
 
 ## 约束
 
@@ -162,7 +165,7 @@ function buildEnvFromConfig(
 - 自定义 provider 不支持 MCP 关联（MCP 管理仅限内置 provider）
 - 不做 provider 导入/导出/分享
 - 自定义 provider 不支持 `apiKeyUrl`，API Key 提示使用通用文案
-- `env` 的所有 value 必须是 string 类型（加载时校验，不合法则跳过并 warning）
+- `env` 的 value 必须是 string 或 number 类型（加载时校验，其他类型跳过并 warning）
 - `ANTHROPIC_BASE_URL` 强制等于 `baseUrl`（确保 provider 检测一致性）
 
 ## MANAGED_ENV_KEYS 影响

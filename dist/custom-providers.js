@@ -228,6 +228,10 @@ async function promptEnvVars() {
             return null;
         try {
             let parsed = JSON.parse(raw);
+            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+                console.log("  Error: must be a JSON object");
+                return null;
+            }
             // Unwrap if user pasted { "env": { ... } } format
             if (parsed.env && typeof parsed.env === "object" && !Array.isArray(parsed.env)) {
                 parsed = parsed.env;
@@ -552,9 +556,20 @@ async function editCustomProviderWizard(config, cp) {
                 break;
             }
         }
-        const updated = updateCustomProvider(config, cp.id, updates);
+        let updated = updateCustomProvider(config, cp.id, updates);
+        // Migrate API key and activeProviderId when ID changes
+        if (updates.id && updates.id !== cp.id) {
+            const oldKey = updated.providers?.[cp.id]?.apiKey;
+            if (oldKey) {
+                updated = setProviderApiKey(updated, updates.id, oldKey);
+                updated = removeProviderApiKey(updated, cp.id);
+            }
+            if (updated.activeProviderId === cp.id) {
+                updated = { ...updated, activeProviderId: updates.id };
+            }
+        }
         await writeConfig(updated);
-        await log("custom-provider-edited", { id: cp.id, field, updates });
+        await log("custom-provider-edited", { id: cp.id, field });
         console.log(`✔ Provider updated\n`);
         return updated;
     }
@@ -577,6 +592,9 @@ async function deleteCustomProviderFlow(config, cp) {
             return null;
         let updated = removeCustomProvider(config, cp.id);
         updated = removeProviderApiKey(updated, cp.id);
+        if (updated.activeProviderId === cp.id) {
+            updated = { ...updated, activeProviderId: undefined };
+        }
         await writeConfig(updated);
         await log("custom-provider-deleted", { id: cp.id });
         console.log(`✔ Provider "${cp.displayName}" deleted\n`);

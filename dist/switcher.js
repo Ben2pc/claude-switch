@@ -139,13 +139,19 @@ export async function switchProvider(provider, model, apiKey) {
         : typeof currentEnv.ANTHROPIC_DEFAULT_OPUS_MODEL === "string"
             ? currentEnv.ANTHROPIC_DEFAULT_OPUS_MODEL
             : undefined;
-    // Redact API key from env for logging
+    // Redact API key from all env values that contain it
     const logEnv = { ...newEnv };
-    if ("ANTHROPIC_AUTH_TOKEN" in logEnv) {
+    const redact = (token) => token.length > 8 ? token.slice(0, 4) + "****" + token.slice(-4) : "****";
+    if (apiKey) {
+        for (const [key, value] of Object.entries(logEnv)) {
+            if (typeof value === "string" && value === apiKey) {
+                logEnv[key] = redact(value);
+            }
+        }
+    }
+    else if ("ANTHROPIC_AUTH_TOKEN" in logEnv) {
         const token = String(logEnv.ANTHROPIC_AUTH_TOKEN);
-        logEnv.ANTHROPIC_AUTH_TOKEN = token.length > 8
-            ? token.slice(0, 4) + "****" + token.slice(-4)
-            : "****";
+        logEnv.ANTHROPIC_AUTH_TOKEN = redact(token);
     }
     await log("switch", {
         from: { provider: currentProviderId, model: currentModel },
