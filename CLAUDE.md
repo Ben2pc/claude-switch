@@ -50,6 +50,16 @@ All inquirer prompts are wrapped with `withEsc()` for ESC-to-cancel. The main lo
 
 **TUI language convention**: All user-facing strings in the TUI (prompts, labels, hints, descriptions) must be in English. This includes MCP display names, descriptions, provider hints, and model descriptions.
 
+## Versioning
+
+Follow [semver](https://semver.org/). Bump version in `package.json` before merging feature branches:
+
+- **patch** (0.x.Y): bug fixes, docs, refactors
+- **minor** (0.X.0): new features, non-breaking changes
+- **major** (X.0.0): breaking changes to config format or CLI interface
+
+**Always bump the version as part of the PR — do not merge without it.**
+
 ## Adding a New Provider
 
 ### Built-in (in source code)
