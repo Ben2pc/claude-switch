@@ -46,6 +46,13 @@ function readMultiLineJson(message) {
         };
         process.stdin.on("data", onStdinData);
         rl.on("line", (line) => {
+            if (line.trim() === "" && buffer.trim()) {
+                // Empty line with content in buffer — finish and let caller handle parse errors
+                rl.close();
+                process.stdin.removeListener("data", onStdinData);
+                resolve(buffer);
+                return;
+            }
             buffer += line;
             try {
                 JSON.parse(buffer);
@@ -206,8 +213,9 @@ async function promptEnvVars() {
             }
             return env;
         }
-        catch {
-            console.log("  Error: invalid JSON");
+        catch (e) {
+            const msg = e instanceof SyntaxError ? e.message : "invalid JSON";
+            console.log(`  Error: ${msg}`);
             return null;
         }
     }
@@ -226,8 +234,9 @@ function parseEnvJson(raw) {
     try {
         parsed = JSON.parse(raw);
     }
-    catch {
-        console.log("  Error: invalid JSON");
+    catch (e) {
+        const msg = e instanceof SyntaxError ? e.message : "invalid JSON";
+        console.log(`  Error: ${msg}`);
         return null;
     }
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {

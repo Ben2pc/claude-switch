@@ -62,6 +62,13 @@ function readMultiLineJson(message: string): Promise<string | null> {
     process.stdin.on("data", onStdinData);
 
     rl.on("line", (line) => {
+      if (line.trim() === "" && buffer.trim()) {
+        // Empty line with content in buffer — finish and let caller handle parse errors
+        rl.close();
+        process.stdin.removeListener("data", onStdinData);
+        resolve(buffer);
+        return;
+      }
       buffer += line;
       try {
         JSON.parse(buffer);
@@ -222,8 +229,9 @@ async function promptEnvVars(): Promise<Record<string, string | number> | undefi
         env.ANTHROPIC_MODEL = "{{MODEL}}";
       }
       return env;
-    } catch {
-      console.log("  Error: invalid JSON");
+    } catch (e) {
+      const msg = e instanceof SyntaxError ? e.message : "invalid JSON";
+      console.log(`  Error: ${msg}`);
       return null;
     }
   } catch (err) {
@@ -240,8 +248,9 @@ function parseEnvJson(raw: string): { apiKey: string; env: Record<string, string
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    console.log("  Error: invalid JSON");
+  } catch (e) {
+    const msg = e instanceof SyntaxError ? e.message : "invalid JSON";
+    console.log(`  Error: ${msg}`);
     return null;
   }
 
