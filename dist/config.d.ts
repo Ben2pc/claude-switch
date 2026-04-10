@@ -8,6 +8,7 @@ export interface SwitchConfig {
     enabledMcps?: string[];
     customProviders?: CustomProviderConfig[];
     managedEnvKeys?: string[];
+    activeProviderId?: string;
 }
 export declare function readConfig(): Promise<SwitchConfig>;
 export declare function writeConfig(config: SwitchConfig): Promise<void>;

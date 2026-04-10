@@ -108,6 +108,40 @@ describe("detectActiveProviderFromSettings", () => {
       }),
     ).toBe("unknown");
   });
+
+  it("prefers stored activeProviderId when baseUrl matches", () => {
+    const customProvider = buildCustomProviderDefinition({
+      id: "my-custom",
+      displayName: "My Custom",
+      baseUrl: "https://open.bigmodel.cn/api/anthropic", // same as Zhipu
+    });
+    const allProviders = [...PROVIDERS, customProvider];
+    // Without stored ID, matches Zhipu first (built-in)
+    expect(
+      detectActiveProviderFromSettings(
+        { env: { ANTHROPIC_BASE_URL: "https://open.bigmodel.cn/api/anthropic" } },
+        allProviders,
+      ),
+    ).toBe("zhipu");
+    // With stored ID, matches custom provider
+    expect(
+      detectActiveProviderFromSettings(
+        { env: { ANTHROPIC_BASE_URL: "https://open.bigmodel.cn/api/anthropic" } },
+        allProviders,
+        "my-custom",
+      ),
+    ).toBe("my-custom");
+  });
+
+  it("falls back to baseUrl matching when stored ID's baseUrl doesn't match", () => {
+    expect(
+      detectActiveProviderFromSettings(
+        { env: { ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/coding" } },
+        PROVIDERS,
+        "zhipu", // stored ID is zhipu, but baseUrl is ark
+      ),
+    ).toBe("ark");
+  });
 });
 
 // ============================================================

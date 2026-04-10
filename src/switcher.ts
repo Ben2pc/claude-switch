@@ -17,11 +17,19 @@ const SHELL_OVERRIDE_KEYS = ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"] as co
 export function detectActiveProviderFromSettings(
   settings: ClaudeSettings,
   providers: ProviderDefinition[] = PROVIDERS,
+  activeProviderId?: string,
 ): string {
   const env = settings.env ?? {};
 
   const baseUrl = env.ANTHROPIC_BASE_URL;
   if (typeof baseUrl === "string" && baseUrl.length > 0) {
+    // If we have a stored active provider ID, verify its baseUrl still matches
+    if (activeProviderId) {
+      const stored = providers.find((p) => p.id === activeProviderId);
+      if (stored && stored.baseUrl === baseUrl) {
+        return activeProviderId;
+      }
+    }
     for (const provider of providers) {
       if (provider.id !== "claude" && provider.baseUrl === baseUrl) {
         return provider.id;
@@ -40,7 +48,7 @@ export async function detectActiveProvider(): Promise<string> {
   const config = await readConfig();
   const settings = await readSettings();
   const allProviders = getAllProviders(config);
-  return detectActiveProviderFromSettings(settings, allProviders);
+  return detectActiveProviderFromSettings(settings, allProviders, config.activeProviderId);
 }
 
 /**
@@ -123,7 +131,7 @@ export async function switchProvider(
   const allManagedKeys = getAllManagedEnvKeys(config);
 
   // Detect current provider from already-read settings (no double read)
-  const currentProviderId = detectActiveProviderFromSettings(settings, allProviders);
+  const currentProviderId = detectActiveProviderFromSettings(settings, allProviders, config.activeProviderId);
 
   // Only backup when switching FROM native (not "unknown")
   let updatedConfig = config;
@@ -165,6 +173,10 @@ export async function switchProvider(
     ...settings,
     env: Object.keys(newEnv).length > 0 ? newEnv : undefined,
   });
+
+  // Save active provider ID for accurate detection (handles same-baseUrl providers)
+  updatedConfig = { ...updatedConfig, activeProviderId: provider.id === "claude" ? undefined : provider.id };
+  await writeConfig(updatedConfig);
 
   // Remove managed MCP servers from ~/.claude.json when switching to Claude native
   if (provider.id === "claude") {

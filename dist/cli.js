@@ -78,7 +78,7 @@ export async function runList() {
     const config = await readConfig();
     const settings = await readSettings();
     const allProviders = getAllProviders(config);
-    const activeProviderId = detectActiveProviderFromSettings(settings, allProviders);
+    const activeProviderId = detectActiveProviderFromSettings(settings, allProviders, config.activeProviderId);
     const env = settings.env ?? {};
     const activeModel = typeof env.ANTHROPIC_MODEL === "string"
         ? env.ANTHROPIC_MODEL

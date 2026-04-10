@@ -16,6 +16,7 @@ export interface SwitchConfig {
   enabledMcps?: string[];
   customProviders?: CustomProviderConfig[];
   managedEnvKeys?: string[];
+  activeProviderId?: string;
 }
 
 export async function readConfig(): Promise<SwitchConfig> {

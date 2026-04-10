@@ -8,10 +8,17 @@ const SHELL_OVERRIDE_KEYS = ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"];
  * Returns "claude" only if no ANTHROPIC_BASE_URL is set.
  * Returns "unknown" if base URL is set but doesn't match any known provider.
  */
-export function detectActiveProviderFromSettings(settings, providers = PROVIDERS) {
+export function detectActiveProviderFromSettings(settings, providers = PROVIDERS, activeProviderId) {
     const env = settings.env ?? {};
     const baseUrl = env.ANTHROPIC_BASE_URL;
     if (typeof baseUrl === "string" && baseUrl.length > 0) {
+        // If we have a stored active provider ID, verify its baseUrl still matches
+        if (activeProviderId) {
+            const stored = providers.find((p) => p.id === activeProviderId);
+            if (stored && stored.baseUrl === baseUrl) {
+                return activeProviderId;
+            }
+        }
         for (const provider of providers) {
             if (provider.id !== "claude" && provider.baseUrl === baseUrl) {
                 return provider.id;
@@ -28,7 +35,7 @@ export async function detectActiveProvider() {
     const config = await readConfig();
     const settings = await readSettings();
     const allProviders = getAllProviders(config);
-    return detectActiveProviderFromSettings(settings, allProviders);
+    return detectActiveProviderFromSettings(settings, allProviders, config.activeProviderId);
 }
 /**
  * Get the current active model name from settings.json env.
@@ -83,7 +90,7 @@ export async function switchProvider(provider, model, apiKey) {
     const allProviders = getAllProviders(config);
     const allManagedKeys = getAllManagedEnvKeys(config);
     // Detect current provider from already-read settings (no double read)
-    const currentProviderId = detectActiveProviderFromSettings(settings, allProviders);
+    const currentProviderId = detectActiveProviderFromSettings(settings, allProviders, config.activeProviderId);
     // Only backup when switching FROM native (not "unknown")
     let updatedConfig = config;
     if (currentProviderId === "claude" && provider.id !== "claude") {
@@ -120,6 +127,9 @@ export async function switchProvider(provider, model, apiKey) {
         ...settings,
         env: Object.keys(newEnv).length > 0 ? newEnv : undefined,
     });
+    // Save active provider ID for accurate detection (handles same-baseUrl providers)
+    updatedConfig = { ...updatedConfig, activeProviderId: provider.id === "claude" ? undefined : provider.id };
+    await writeConfig(updatedConfig);
     // Remove managed MCP servers from ~/.claude.json when switching to Claude native
     if (provider.id === "claude") {
         cleanedMcps = await cleanupManagedMcps(updatedConfig);
