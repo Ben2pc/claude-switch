@@ -131,58 +131,33 @@ async function promptEnvVars() {
             message: "Env vars configuration",
             choices: [
                 { name: "Use default (BASE_URL + AUTH_TOKEN + MODEL)", value: "default" },
-                { name: "Define key-value pairs", value: "kv" },
                 { name: "Paste JSON", value: "json" },
             ],
         }, CLEAR));
         if (method === "default")
             return undefined;
-        if (method === "json") {
-            const raw = await withEsc(editor({
-                message: "Paste env vars JSON (use {{API_KEY}} and {{MODEL}} as placeholders)",
-                default: JSON.stringify({ ANTHROPIC_BASE_URL: "", ANTHROPIC_AUTH_TOKEN: "{{API_KEY}}", ANTHROPIC_MODEL: "{{MODEL}}" }, null, 2),
-            }));
-            try {
-                const parsed = JSON.parse(raw);
-                if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-                    console.log("  Error: must be a JSON object");
-                    return null;
-                }
-                // Validate all values are strings
-                for (const [key, value] of Object.entries(parsed)) {
-                    if (typeof value !== "string") {
-                        console.log(`  Error: value for "${key}" must be a string, got ${typeof value}`);
-                        return null;
-                    }
-                }
-                return parsed;
-            }
-            catch {
-                console.log("  Error: invalid JSON");
+        const raw = await withEsc(editor({
+            message: "Paste env vars JSON (use {{API_KEY}} and {{MODEL}} as placeholders)",
+            default: JSON.stringify({ ANTHROPIC_BASE_URL: "", ANTHROPIC_AUTH_TOKEN: "{{API_KEY}}", ANTHROPIC_MODEL: "{{MODEL}}" }, null, 2),
+        }));
+        try {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+                console.log("  Error: must be a JSON object");
                 return null;
             }
+            for (const [key, value] of Object.entries(parsed)) {
+                if (typeof value !== "string") {
+                    console.log(`  Error: value for "${key}" must be a string, got ${typeof value}`);
+                    return null;
+                }
+            }
+            return parsed;
         }
-        // Key-value pairs
-        const envVars = {};
-        while (true) {
-            const addMore = await withEsc(confirm({
-                message: Object.keys(envVars).length === 0
-                    ? "Add an env var?"
-                    : "Add another env var?",
-                default: true,
-            }, CLEAR));
-            if (!addMore)
-                break;
-            const key = await withEsc(input({
-                message: "Env var key (e.g. ANTHROPIC_MODEL)",
-                validate: (v) => v.trim().length > 0 || "Cannot be empty",
-            }, CLEAR));
-            const value = await withEsc(input({
-                message: `Value for ${key.trim()} (use {{API_KEY}} / {{MODEL}} for placeholders)`,
-            }, CLEAR));
-            envVars[key.trim()] = value;
+        catch {
+            console.log("  Error: invalid JSON");
+            return null;
         }
-        return Object.keys(envVars).length > 0 ? envVars : undefined;
     }
     catch (err) {
         if (isCancelled(err))
