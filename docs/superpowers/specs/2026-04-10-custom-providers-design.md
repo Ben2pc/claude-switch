@@ -135,12 +135,12 @@ function buildEnvFromConfig(
 1. **Provider ID** — 文本输入，校验：无空格，不与内置 ID 或保留词冲突
 2. **Display Name** — 文本输入
 3. **Base URL** — 文本输入，校验：以 `http://` 或 `https://` 开头
-4. **Models** — 循环：添加模型（name、displayName?、description?、default?），或结束
-5. **Env Vars** — 选择输入方式：
+4. **Models** — 至少添加一个模型（name、displayName?、description?、default?），可循环添加更多
+5. **API Key** — 密码输入，必填
+6. **Env Vars** — 选择输入方式：
    - 「Use default (3 vars)」→ 跳过，使用默认模板
-   - 「Key-value pairs」→ 逐条输入 key 和 value，循环直到结束
    - 「Paste JSON」→ 粘贴一段 JSON 对象，解析校验
-6. **Confirm** — 显示摘要，确认后保存
+7. **Confirm** — 显示摘要，确认后保存
 
 ### Edit Provider
 
