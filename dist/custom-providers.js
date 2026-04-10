@@ -472,11 +472,13 @@ async function editCustomProviderWizard(config, cp) {
             }
             case "models": {
                 const currentModels = cp.models ?? [];
+                const defaultModel = currentModels.find((m) => m.default);
                 const action = await withEsc(select({
-                    message: `Models: ${currentModels.map((m) => m.name).join(", ") || "(none)"}`,
+                    message: `Models: ${currentModels.map((m) => m.default ? `${m.name} (default)` : m.name).join(", ") || "(none)"}`,
                     choices: [
                         { name: "+ Add model", value: "add" },
                         ...(currentModels.length > 0 ? [{ name: "- Remove model", value: "remove" }] : []),
+                        ...(currentModels.length > 1 ? [{ name: `★ Set default${defaultModel ? ` (current: ${defaultModel.name})` : ""}`, value: "default" }] : []),
                         { name: "↻ Replace all", value: "replace" },
                     ],
                 }, CLEAR));
@@ -518,6 +520,20 @@ async function editCustomProviderWizard(config, cp) {
                         remaining[0] = { ...remaining[0], default: true };
                     }
                     updates = { models: remaining };
+                }
+                else if (action === "default") {
+                    const newDefault = await withEsc(select({
+                        message: "Set default model",
+                        choices: currentModels.map((m) => ({
+                            name: m.default ? `${m.displayName ?? m.name}  ● current default` : (m.displayName ?? m.name),
+                            value: m.name,
+                        })),
+                    }, CLEAR));
+                    const updated = currentModels.map((m) => ({
+                        ...m,
+                        default: m.name === newDefault ? true : undefined,
+                    }));
+                    updates = { models: updated };
                 }
                 else {
                     const models = await promptModels();
