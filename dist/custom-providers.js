@@ -189,11 +189,8 @@ async function promptEnvVars() {
             }
             const env = {};
             for (const [key, value] of Object.entries(parsed)) {
-                if (typeof value === "string") {
+                if (typeof value === "string" || typeof value === "number") {
                     env[key] = value;
-                }
-                else if (typeof value === "number" || typeof value === "boolean") {
-                    env[key] = String(value);
                 }
                 else {
                     console.log(`  Error: value for "${key}" must be a string or number, got ${typeof value}`);
@@ -201,10 +198,10 @@ async function promptEnvVars() {
                 }
             }
             // Auto-replace known keys with placeholders
-            if (env.ANTHROPIC_AUTH_TOKEN && env.ANTHROPIC_AUTH_TOKEN !== "{{API_KEY}}") {
+            if (typeof env.ANTHROPIC_AUTH_TOKEN === "string" && env.ANTHROPIC_AUTH_TOKEN !== "{{API_KEY}}") {
                 env.ANTHROPIC_AUTH_TOKEN = "{{API_KEY}}";
             }
-            if (env.ANTHROPIC_MODEL && env.ANTHROPIC_MODEL !== "{{MODEL}}") {
+            if (typeof env.ANTHROPIC_MODEL === "string" && env.ANTHROPIC_MODEL !== "{{MODEL}}") {
                 env.ANTHROPIC_MODEL = "{{MODEL}}";
             }
             return env;
@@ -241,14 +238,10 @@ function parseEnvJson(raw) {
     if (parsed.env && typeof parsed.env === "object" && !Array.isArray(parsed.env)) {
         parsed = parsed.env;
     }
-    // Coerce non-string values to strings (e.g. numbers like 1 or 3000000)
     const env = {};
     for (const [key, value] of Object.entries(parsed)) {
-        if (typeof value === "string") {
+        if (typeof value === "string" || typeof value === "number") {
             env[key] = value;
-        }
-        else if (typeof value === "number" || typeof value === "boolean") {
-            env[key] = String(value);
         }
         else {
             console.log(`  Error: value for "${key}" must be a string or number, got ${typeof value}`);
@@ -257,14 +250,14 @@ function parseEnvJson(raw) {
     }
     // Extract API key before replacing with placeholder
     const apiKey = env.ANTHROPIC_AUTH_TOKEN;
-    if (!apiKey || apiKey === "{{API_KEY}}") {
+    if (!apiKey || typeof apiKey !== "string" || apiKey === "{{API_KEY}}") {
         console.log("  Error: ANTHROPIC_AUTH_TOKEN is required in JSON");
         return null;
     }
     // Extract base URL
-    const baseUrl = env.ANTHROPIC_BASE_URL;
+    const baseUrl = typeof env.ANTHROPIC_BASE_URL === "string" ? env.ANTHROPIC_BASE_URL : undefined;
     // Extract model as a model entry
-    const modelName = env.ANTHROPIC_MODEL;
+    const modelName = typeof env.ANTHROPIC_MODEL === "string" ? env.ANTHROPIC_MODEL : undefined;
     const models = [];
     if (modelName && modelName !== "{{MODEL}}") {
         models.push({ name: modelName, default: true });

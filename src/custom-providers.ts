@@ -184,7 +184,7 @@ async function promptApiKey(): Promise<string | null> {
 /**
  * Prompt for env configuration.
  */
-async function promptEnvVars(): Promise<Record<string, string> | undefined | null> {
+async function promptEnvVars(): Promise<Record<string, string | number> | undefined | null> {
   try {
     const method = await withEsc(select({
       message: "env configuration",
@@ -205,22 +205,20 @@ async function promptEnvVars(): Promise<Record<string, string> | undefined | nul
       if (parsed.env && typeof parsed.env === "object" && !Array.isArray(parsed.env)) {
         parsed = parsed.env;
       }
-      const env: Record<string, string> = {};
+      const env: Record<string, string | number> = {};
       for (const [key, value] of Object.entries(parsed)) {
-        if (typeof value === "string") {
+        if (typeof value === "string" || typeof value === "number") {
           env[key] = value;
-        } else if (typeof value === "number" || typeof value === "boolean") {
-          env[key] = String(value);
         } else {
           console.log(`  Error: value for "${key}" must be a string or number, got ${typeof value}`);
           return null;
         }
       }
       // Auto-replace known keys with placeholders
-      if (env.ANTHROPIC_AUTH_TOKEN && env.ANTHROPIC_AUTH_TOKEN !== "{{API_KEY}}") {
+      if (typeof env.ANTHROPIC_AUTH_TOKEN === "string" && env.ANTHROPIC_AUTH_TOKEN !== "{{API_KEY}}") {
         env.ANTHROPIC_AUTH_TOKEN = "{{API_KEY}}";
       }
-      if (env.ANTHROPIC_MODEL && env.ANTHROPIC_MODEL !== "{{MODEL}}") {
+      if (typeof env.ANTHROPIC_MODEL === "string" && env.ANTHROPIC_MODEL !== "{{MODEL}}") {
         env.ANTHROPIC_MODEL = "{{MODEL}}";
       }
       return env;
@@ -238,7 +236,7 @@ async function promptEnvVars(): Promise<Record<string, string> | undefined | nul
  * Parse pasted env JSON, extract API key and env template.
  * Returns { apiKey, env } or null on error.
  */
-function parseEnvJson(raw: string): { apiKey: string; env: Record<string, string>; baseUrl?: string; models?: ProviderModel[] } | null {
+function parseEnvJson(raw: string): { apiKey: string; env: Record<string, string | number>; baseUrl?: string; models?: ProviderModel[] } | null {
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(raw);
@@ -257,13 +255,10 @@ function parseEnvJson(raw: string): { apiKey: string; env: Record<string, string
     parsed = parsed.env as Record<string, unknown>;
   }
 
-  // Coerce non-string values to strings (e.g. numbers like 1 or 3000000)
-  const env: Record<string, string> = {};
+  const env: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(parsed)) {
-    if (typeof value === "string") {
+    if (typeof value === "string" || typeof value === "number") {
       env[key] = value;
-    } else if (typeof value === "number" || typeof value === "boolean") {
-      env[key] = String(value);
     } else {
       console.log(`  Error: value for "${key}" must be a string or number, got ${typeof value}`);
       return null;
@@ -272,16 +267,16 @@ function parseEnvJson(raw: string): { apiKey: string; env: Record<string, string
 
   // Extract API key before replacing with placeholder
   const apiKey = env.ANTHROPIC_AUTH_TOKEN;
-  if (!apiKey || apiKey === "{{API_KEY}}") {
+  if (!apiKey || typeof apiKey !== "string" || apiKey === "{{API_KEY}}") {
     console.log("  Error: ANTHROPIC_AUTH_TOKEN is required in JSON");
     return null;
   }
 
   // Extract base URL
-  const baseUrl = env.ANTHROPIC_BASE_URL;
+  const baseUrl = typeof env.ANTHROPIC_BASE_URL === "string" ? env.ANTHROPIC_BASE_URL : undefined;
 
   // Extract model as a model entry
-  const modelName = env.ANTHROPIC_MODEL;
+  const modelName = typeof env.ANTHROPIC_MODEL === "string" ? env.ANTHROPIC_MODEL : undefined;
   const models: ProviderModel[] = [];
   if (modelName && modelName !== "{{MODEL}}") {
     models.push({ name: modelName, default: true });
@@ -327,7 +322,7 @@ async function addCustomProviderWizard(config: SwitchConfig): Promise<SwitchConf
     let baseUrl: string;
     let models: ProviderModel[];
     let apiKey: string;
-    let env: Record<string, string> | undefined;
+    let env: Record<string, string | number> | undefined;
 
     if (method === "json") {
       // Paste JSON path

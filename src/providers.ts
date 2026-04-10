@@ -19,7 +19,7 @@ export interface CustomProviderConfig {
   displayName: string;
   baseUrl: string;
   models?: ProviderModel[];
-  env?: Record<string, string>;
+  env?: Record<string, string | number>;
 }
 
 // All env keys that any provider may write — used for cleanup
@@ -136,9 +136,13 @@ export function buildCustomProviderDefinition(
       if (template) {
         const result: Record<string, string | number> = {};
         for (const [key, value] of Object.entries(template)) {
-          result[key] = value
-            .replace(/\{\{API_KEY\}\}/g, apiKey)
-            .replace(/\{\{MODEL\}\}/g, model);
+          if (typeof value === "string") {
+            result[key] = value
+              .replace(/\{\{API_KEY\}\}/g, apiKey)
+              .replace(/\{\{MODEL\}\}/g, model);
+          } else {
+            result[key] = value;
+          }
         }
         // Force ANTHROPIC_BASE_URL to match baseUrl
         result.ANTHROPIC_BASE_URL = def.baseUrl;
@@ -169,11 +173,11 @@ export function getAllProviders(
       console.warn(`Custom provider "${cp.id}" conflicts with built-in provider, skipping`);
       continue;
     }
-    // Validate env values are all strings
+    // Validate env values are strings or numbers
     if (cp.env) {
-      const invalid = Object.entries(cp.env).find(([, v]) => typeof v !== "string");
+      const invalid = Object.entries(cp.env).find(([, v]) => typeof v !== "string" && typeof v !== "number");
       if (invalid) {
-        console.warn(`Custom provider "${cp.id}" has non-string env value for key "${invalid[0]}", skipping`);
+        console.warn(`Custom provider "${cp.id}" has invalid env value for key "${invalid[0]}", skipping`);
         continue;
       }
     }

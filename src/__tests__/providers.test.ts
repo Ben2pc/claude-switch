@@ -267,7 +267,29 @@ describe("getAllProviders", () => {
     spy.mockRestore();
   });
 
-  it("skips custom providers with invalid env (non-string values)", () => {
+  it("accepts custom providers with number values in env", () => {
+    const config = {
+      customProviders: [
+        {
+          id: "with-numbers",
+          displayName: "With Numbers",
+          baseUrl: "https://example.com/v1",
+          env: {
+            ANTHROPIC_BASE_URL: "https://example.com/v1",
+            ANTHROPIC_AUTH_TOKEN: "{{API_KEY}}",
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: 1,
+          },
+        },
+      ],
+    };
+    const result = getAllProviders(config);
+    expect(result.length).toBe(PROVIDERS.length + 1);
+    const provider = result.find((p) => p.id === "with-numbers")!;
+    const env = provider.buildEnv("key", "model");
+    expect(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe(1);
+  });
+
+  it("skips custom providers with invalid env values (objects/arrays)", () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const config = {
       customProviders: [
@@ -275,7 +297,7 @@ describe("getAllProviders", () => {
           id: "bad",
           displayName: "Bad",
           baseUrl: "https://bad.com/v1",
-          env: { SOME_KEY: 123 as unknown as string },
+          env: { SOME_KEY: { nested: true } as unknown as string },
         },
       ],
     };
