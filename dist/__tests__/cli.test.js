@@ -300,4 +300,98 @@ describe("runQuickSwitch", () => {
         expect(output).toContain("MiniMax-M2.7");
         vi.restoreAllMocks();
     });
+    it("quick-switches to a custom provider", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({
+            providers: { "my-proxy": { apiKey: "proxy-key" } },
+            customProviders: [
+                {
+                    id: "my-proxy",
+                    displayName: "My Proxy",
+                    baseUrl: "https://proxy.example.com/v1",
+                    models: [{ name: "model-a", default: true }],
+                },
+            ],
+        });
+        mockReadSettings.mockResolvedValue({});
+        mockReadMcpServers.mockResolvedValue({});
+        const code = await runQuickSwitch("my-proxy", "model-a");
+        expect(code).toBe(0);
+        const output = logs.join("\n");
+        expect(output).toContain("My Proxy");
+        expect(output).toContain("model-a");
+        vi.restoreAllMocks();
+    });
+    it("quick-switch skips model validation for custom provider with no models", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({
+            providers: { "my-proxy": { apiKey: "proxy-key" } },
+            customProviders: [
+                {
+                    id: "my-proxy",
+                    displayName: "My Proxy",
+                    baseUrl: "https://proxy.example.com/v1",
+                },
+            ],
+        });
+        mockReadSettings.mockResolvedValue({});
+        mockReadMcpServers.mockResolvedValue({});
+        const code = await runQuickSwitch("my-proxy", "any-model");
+        expect(code).toBe(0);
+        const output = logs.join("\n");
+        expect(output).toContain("My Proxy");
+        vi.restoreAllMocks();
+    });
+    it("unknown provider error lists custom provider IDs", async () => {
+        const errors = [];
+        vi.spyOn(console, "error").mockImplementation((...args) => {
+            errors.push(args.join(" "));
+        });
+        vi.spyOn(console, "log").mockImplementation(() => { });
+        mockReadConfig.mockResolvedValue({
+            customProviders: [
+                {
+                    id: "my-proxy",
+                    displayName: "My Proxy",
+                    baseUrl: "https://proxy.example.com/v1",
+                },
+            ],
+        });
+        const code = await runQuickSwitch("nonexistent");
+        expect(code).toBe(1);
+        const output = errors.join("\n");
+        expect(output).toContain("my-proxy");
+        vi.restoreAllMocks();
+    });
+});
+describe("runList with custom providers", () => {
+    it("lists custom providers", async () => {
+        const logs = [];
+        vi.spyOn(console, "log").mockImplementation((...args) => {
+            logs.push(args.join(" "));
+        });
+        mockReadConfig.mockResolvedValue({
+            customProviders: [
+                {
+                    id: "my-proxy",
+                    displayName: "My Proxy",
+                    baseUrl: "https://proxy.example.com/v1",
+                    models: [{ name: "model-a" }],
+                },
+            ],
+        });
+        mockReadSettings.mockResolvedValue({});
+        await runList();
+        const output = logs.join("\n");
+        expect(output).toContain("my-proxy");
+        expect(output).toContain("My Proxy");
+        expect(output).toContain("model-a");
+        vi.restoreAllMocks();
+    });
 });

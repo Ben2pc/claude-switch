@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { setProviderApiKey, removeProviderApiKey, getProviderApiKey, } from "../config.js";
+import { setProviderApiKey, removeProviderApiKey, getProviderApiKey, addCustomProvider, updateCustomProvider, removeCustomProvider, getCustomProvider, } from "../config.js";
 // --- File I/O tests for readConfig / writeConfig ---
 const mockReadFile = vi.fn();
 const mockWriteFile = vi.fn();
@@ -68,6 +68,19 @@ describe("writeConfig (file I/O)", () => {
         expect(written.providers).toEqual({ zhipu: { apiKey: "z" } });
         expect(written.enabledMcps).toEqual(["mcp-1"]);
     });
+    it("serializes customProviders and managedEnvKeys", async () => {
+        const config = {
+            customProviders: [
+                { id: "my-proxy", displayName: "My Proxy", baseUrl: "https://example.com/v1" },
+            ],
+            managedEnvKeys: ["CUSTOM_KEY"],
+        };
+        await writeConfig(config);
+        const written = JSON.parse(mockWriteFile.mock.calls[0][1]);
+        expect(written.customProviders).toHaveLength(1);
+        expect(written.customProviders[0].id).toBe("my-proxy");
+        expect(written.managedEnvKeys).toEqual(["CUSTOM_KEY"]);
+    });
 });
 describe("getProviderApiKey", () => {
     it("returns undefined for missing provider", () => {
@@ -135,5 +148,110 @@ describe("removeProviderApiKey", () => {
         };
         const result = removeProviderApiKey(config, "ark");
         expect(result.enabledMcps).toEqual(["mcp-1"]);
+    });
+});
+describe("addCustomProvider", () => {
+    const cp = {
+        id: "my-proxy",
+        displayName: "My Proxy",
+        baseUrl: "https://example.com/v1",
+    };
+    it("adds to empty config", () => {
+        const result = addCustomProvider({}, cp);
+        expect(result.customProviders).toHaveLength(1);
+        expect(result.customProviders[0].id).toBe("my-proxy");
+    });
+    it("appends to existing custom providers", () => {
+        const existing = {
+            id: "other",
+            displayName: "Other",
+            baseUrl: "https://other.com/v1",
+        };
+        const config = { customProviders: [existing] };
+        const result = addCustomProvider(config, cp);
+        expect(result.customProviders).toHaveLength(2);
+    });
+    it("preserves other config fields", () => {
+        const config = {
+            providers: { ark: { apiKey: "k" } },
+            enabledMcps: ["mcp-1"],
+        };
+        const result = addCustomProvider(config, cp);
+        expect(result.providers?.ark?.apiKey).toBe("k");
+        expect(result.enabledMcps).toEqual(["mcp-1"]);
+    });
+});
+describe("updateCustomProvider", () => {
+    const cp = {
+        id: "my-proxy",
+        displayName: "My Proxy",
+        baseUrl: "https://example.com/v1",
+    };
+    it("updates existing provider by id", () => {
+        const config = { customProviders: [cp] };
+        const result = updateCustomProvider(config, "my-proxy", { displayName: "Updated" });
+        expect(result.customProviders[0].displayName).toBe("Updated");
+        expect(result.customProviders[0].baseUrl).toBe("https://example.com/v1");
+    });
+    it("returns unchanged config if id not found", () => {
+        const config = { customProviders: [cp] };
+        const result = updateCustomProvider(config, "nonexistent", { displayName: "X" });
+        expect(result).toEqual(config);
+    });
+    it("can update id itself", () => {
+        const config = { customProviders: [cp] };
+        const result = updateCustomProvider(config, "my-proxy", { id: "new-id" });
+        expect(result.customProviders[0].id).toBe("new-id");
+    });
+});
+describe("removeCustomProvider", () => {
+    const cp = {
+        id: "my-proxy",
+        displayName: "My Proxy",
+        baseUrl: "https://example.com/v1",
+    };
+    it("removes provider by id", () => {
+        const config = { customProviders: [cp] };
+        const result = removeCustomProvider(config, "my-proxy");
+        expect(result.customProviders).toBeUndefined();
+    });
+    it("sets customProviders to undefined when last removed", () => {
+        const config = { customProviders: [cp] };
+        const result = removeCustomProvider(config, "my-proxy");
+        expect(result.customProviders).toBeUndefined();
+    });
+    it("preserves other custom providers", () => {
+        const other = {
+            id: "other",
+            displayName: "Other",
+            baseUrl: "https://other.com/v1",
+        };
+        const config = { customProviders: [cp, other] };
+        const result = removeCustomProvider(config, "my-proxy");
+        expect(result.customProviders).toHaveLength(1);
+        expect(result.customProviders[0].id).toBe("other");
+    });
+    it("no-op for non-existent id", () => {
+        const config = { customProviders: [cp] };
+        const result = removeCustomProvider(config, "nonexistent");
+        expect(result.customProviders).toHaveLength(1);
+    });
+});
+describe("getCustomProvider", () => {
+    const cp = {
+        id: "my-proxy",
+        displayName: "My Proxy",
+        baseUrl: "https://example.com/v1",
+    };
+    it("returns provider by id", () => {
+        const config = { customProviders: [cp] };
+        expect(getCustomProvider(config, "my-proxy")).toEqual(cp);
+    });
+    it("returns undefined for missing id", () => {
+        const config = { customProviders: [cp] };
+        expect(getCustomProvider(config, "nonexistent")).toBeUndefined();
+    });
+    it("returns undefined when customProviders is undefined", () => {
+        expect(getCustomProvider({}, "my-proxy")).toBeUndefined();
     });
 });

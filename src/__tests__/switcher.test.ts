@@ -37,7 +37,7 @@ vi.mock("../logger.js", () => ({
   log: (...args: unknown[]) => mockLog(...args),
 }));
 
-import { PROVIDERS, MANAGED_ENV_KEYS } from "../providers.js";
+import { PROVIDERS, MANAGED_ENV_KEYS, buildCustomProviderDefinition, type CustomProviderConfig } from "../providers.js";
 import {
   detectActiveProviderFromSettings,
   detectActiveProvider,
@@ -116,6 +116,7 @@ describe("detectActiveProviderFromSettings", () => {
 
 describe("detectActiveProvider", () => {
   it("delegates to readSettings and returns correct provider ID", async () => {
+    mockReadConfig.mockResolvedValue({});
     mockReadSettings.mockResolvedValue({
       env: { ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/coding" },
     });
@@ -666,5 +667,91 @@ describe("cleanupManagedMcps", () => {
     await cleanupManagedMcps({ enabledMcps: ["nonexistent-1", "nonexistent-2"] });
 
     expect(mockWriteMcpServers).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================
+// Custom provider switching
+// ============================================================
+
+describe("custom provider switching", () => {
+  const customCp: CustomProviderConfig = {
+    id: "my-proxy",
+    displayName: "My Proxy",
+    baseUrl: "https://my-proxy.example.com/v1",
+    models: [{ name: "model-1", default: true }],
+    envVars: {
+      ANTHROPIC_BASE_URL: "https://my-proxy.example.com/v1",
+      ANTHROPIC_AUTH_TOKEN: "{{API_KEY}}",
+      ANTHROPIC_MODEL: "{{MODEL}}",
+      CUSTOM_TIMEOUT: "5000",
+    },
+  };
+  const customProvider = buildCustomProviderDefinition(customCp);
+
+  it("detectActiveProviderFromSettings recognizes custom provider", () => {
+    const allProviders = [...PROVIDERS, customProvider];
+    const result = detectActiveProviderFromSettings(
+      { env: { ANTHROPIC_BASE_URL: "https://my-proxy.example.com/v1" } },
+      allProviders,
+    );
+    expect(result).toBe("my-proxy");
+  });
+
+  it("switches to custom provider with correct env vars", async () => {
+    mockReadConfig.mockResolvedValue({
+      customProviders: [customCp],
+    });
+    mockReadSettings.mockResolvedValue({ env: {} });
+    mockReadMcpServers.mockResolvedValue({});
+
+    await switchProvider(customProvider, "model-1", "my-api-key");
+
+    const writtenSettings = mockWriteSettings.mock.calls[0][0] as ClaudeSettings;
+    expect(writtenSettings.env?.ANTHROPIC_BASE_URL).toBe("https://my-proxy.example.com/v1");
+    expect(writtenSettings.env?.ANTHROPIC_AUTH_TOKEN).toBe("my-api-key");
+    expect(writtenSettings.env?.ANTHROPIC_MODEL).toBe("model-1");
+    expect(writtenSettings.env?.CUSTOM_TIMEOUT).toBe("5000");
+  });
+
+  it("cleans custom env keys when switching away from custom provider", async () => {
+    mockReadConfig.mockResolvedValue({
+      customProviders: [customCp],
+      managedEnvKeys: ["CUSTOM_TIMEOUT"],
+    });
+    mockReadSettings.mockResolvedValue({
+      env: {
+        ANTHROPIC_BASE_URL: "https://my-proxy.example.com/v1",
+        ANTHROPIC_AUTH_TOKEN: "key",
+        ANTHROPIC_MODEL: "model-1",
+        CUSTOM_TIMEOUT: "5000",
+      },
+    });
+    mockReadMcpServers.mockResolvedValue({});
+
+    const ark = PROVIDERS.find((p) => p.id === "ark")!;
+    await switchProvider(ark, "doubao-seed-2.0-code", "ark-key");
+
+    const writtenSettings = mockWriteSettings.mock.calls[0][0] as ClaudeSettings;
+    expect(writtenSettings.env?.CUSTOM_TIMEOUT).toBeUndefined();
+    expect(writtenSettings.env?.ANTHROPIC_MODEL).toBe("doubao-seed-2.0-code");
+  });
+
+  it("persists new custom env keys to managedEnvKeys", async () => {
+    mockReadConfig.mockResolvedValue({
+      customProviders: [customCp],
+    });
+    mockReadSettings.mockResolvedValue({ env: {} });
+    mockReadMcpServers.mockResolvedValue({});
+
+    await switchProvider(customProvider, "model-1", "key");
+
+    // Check that writeConfig was called with managedEnvKeys containing CUSTOM_TIMEOUT
+    const configCalls = mockWriteConfig.mock.calls;
+    const hasCustomKey = configCalls.some((call) => {
+      const config = call[0] as SwitchConfig;
+      return config.managedEnvKeys?.includes("CUSTOM_TIMEOUT");
+    });
+    expect(hasCustomKey).toBe(true);
   });
 });

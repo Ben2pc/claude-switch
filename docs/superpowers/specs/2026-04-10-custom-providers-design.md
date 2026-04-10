@@ -46,13 +46,22 @@ Provider 目前硬编码在 `src/providers.ts` 中。用户想接入自定义代
 
 ### 默认 env 行为
 
-当 `envVars` 省略时，使用默认三件套模板：
+当 `envVars` 省略时，根据 `models` 是否存在选择默认模板：
 
+**有 models 时**（三件套）：
 ```json
 {
   "ANTHROPIC_BASE_URL": "<baseUrl>",
   "ANTHROPIC_AUTH_TOKEN": "<apiKey>",
   "ANTHROPIC_MODEL": "<model>"
+}
+```
+
+**无 models 时**（两件套）：
+```json
+{
+  "ANTHROPIC_BASE_URL": "<baseUrl>",
+  "ANTHROPIC_AUTH_TOKEN": "<apiKey>"
 }
 ```
 
@@ -159,13 +168,18 @@ function buildEnvFromConfig(
 ## 约束
 
 - 内置 provider 不可编辑、不可删除
-- 自定义 provider 不支持 MCP 关联（MCP 管理仍仅限内置 provider）
+- 自定义 provider 不支持 MCP 关联（MCP 管理仅限内置 provider）
 - 不做 provider 导入/导出/分享
-- 不校验 envVars 的正确性（用户自行负责）
 - 自定义 provider 不支持 `apiKeyUrl`，API Key 提示使用通用文案
+- `envVars` 的所有 value 必须是 string 类型（加载时校验，不合法则跳过并 warning）
+- `ANTHROPIC_BASE_URL` 强制等于 `baseUrl`（确保 provider 检测一致性）
 
 ## MANAGED_ENV_KEYS 影响
 
 自定义 provider 可能写入不在当前 `MANAGED_ENV_KEYS` 列表中的 env key。
 
-策略：**动态合并**。构建完整 provider 列表时，收集所有自定义 provider `envVars` 中的 key，与静态 `MANAGED_ENV_KEYS` 取并集。确保在任意 provider 之间切换时都能清理干净。
+策略：**动态合并 + 持久化历史 keys**。
+- `SwitchConfig` 增加 `managedEnvKeys?: string[]` 字段，记录所有曾经写入过的自定义 env keys
+- 每次 `switchProvider` 写入 env 时，将新 keys 追加到 `managedEnvKeys` 并持久化
+- 清理时使用的 managed keys = 静态 `MANAGED_ENV_KEYS` ∪ `config.managedEnvKeys` ∪ 当前 `customProviders` 的 keys
+- 删除自定义 provider 时不清理 `managedEnvKeys`（保守策略，确保残留 keys 能被清理）

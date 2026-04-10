@@ -90,3 +90,84 @@ export const PROVIDERS = [
 export function getProvider(id) {
     return PROVIDERS.find((p) => p.id === id);
 }
+/**
+ * Convert a CustomProviderConfig (JSON-serializable) into a ProviderDefinition
+ * with a functional buildEnv() method.
+ */
+export function buildCustomProviderDefinition(def) {
+    const hasModels = def.models && def.models.length > 0;
+    const template = def.envVars;
+    return {
+        id: def.id,
+        displayName: def.displayName,
+        baseUrl: def.baseUrl,
+        apiKeyUrl: "",
+        models: def.models ?? [],
+        buildEnv(apiKey, model) {
+            if (template) {
+                const result = {};
+                for (const [key, value] of Object.entries(template)) {
+                    result[key] = value
+                        .replace(/\{\{API_KEY\}\}/g, apiKey)
+                        .replace(/\{\{MODEL\}\}/g, model);
+                }
+                // Force ANTHROPIC_BASE_URL to match baseUrl
+                result.ANTHROPIC_BASE_URL = def.baseUrl;
+                return result;
+            }
+            // Default template
+            const env = {
+                ANTHROPIC_BASE_URL: def.baseUrl,
+                ANTHROPIC_AUTH_TOKEN: apiKey,
+            };
+            if (hasModels) {
+                env.ANTHROPIC_MODEL = model;
+            }
+            return env;
+        },
+    };
+}
+/**
+ * Merge built-in PROVIDERS with custom providers from config.
+ * Skips custom providers with conflicting IDs or invalid envVars.
+ */
+export function getAllProviders(config) {
+    const builtInIds = new Set(PROVIDERS.map((p) => p.id));
+    const custom = [];
+    for (const cp of config.customProviders ?? []) {
+        if (builtInIds.has(cp.id)) {
+            console.warn(`Custom provider "${cp.id}" conflicts with built-in provider, skipping`);
+            continue;
+        }
+        // Validate envVars values are all strings
+        if (cp.envVars) {
+            const invalid = Object.entries(cp.envVars).find(([, v]) => typeof v !== "string");
+            if (invalid) {
+                console.warn(`Custom provider "${cp.id}" has non-string envVars value for key "${invalid[0]}", skipping`);
+                continue;
+            }
+        }
+        custom.push(buildCustomProviderDefinition(cp));
+    }
+    return [...PROVIDERS, ...custom];
+}
+/**
+ * Compute the full set of managed env keys: static built-in keys
+ * + persisted historical keys + current custom provider keys.
+ */
+export function getAllManagedEnvKeys(config) {
+    const keys = new Set(MANAGED_ENV_KEYS);
+    // Add persisted historical keys
+    for (const key of config.managedEnvKeys ?? []) {
+        keys.add(key);
+    }
+    // Add current custom provider keys
+    for (const cp of config.customProviders ?? []) {
+        if (cp.envVars) {
+            for (const key of Object.keys(cp.envVars)) {
+                keys.add(key);
+            }
+        }
+    }
+    return [...keys];
+}

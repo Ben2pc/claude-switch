@@ -1,5 +1,13 @@
-import { describe, it, expect } from "vitest";
-import { PROVIDERS, MANAGED_ENV_KEYS, getProvider } from "../providers.js";
+import { describe, it, expect, vi } from "vitest";
+import {
+  PROVIDERS,
+  MANAGED_ENV_KEYS,
+  getProvider,
+  buildCustomProviderDefinition,
+  getAllProviders,
+  getAllManagedEnvKeys,
+  type CustomProviderConfig,
+} from "../providers.js";
 
 describe("PROVIDERS", () => {
   it("all providers have unique IDs", () => {
@@ -113,14 +121,219 @@ describe("provider constraints", () => {
     }
   });
 
-  it("all non-Claude providers have apiKeyUrl set", () => {
+  it("all built-in non-Claude providers have apiKeyUrl set", () => {
     for (const p of PROVIDERS.filter((p) => p.id !== "claude")) {
-      expect(p.apiKeyUrl.length).toBeGreaterThan(0);
+      expect(p.apiKeyUrl!.length).toBeGreaterThan(0);
     }
   });
 
   it("MANAGED_ENV_KEYS includes ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN", () => {
     expect(MANAGED_ENV_KEYS).toContain("ANTHROPIC_BASE_URL");
     expect(MANAGED_ENV_KEYS).toContain("ANTHROPIC_AUTH_TOKEN");
+  });
+});
+
+describe("buildCustomProviderDefinition", () => {
+  it("uses default 3-var template when envVars is omitted and models exist", () => {
+    const cp: CustomProviderConfig = {
+      id: "test",
+      displayName: "Test",
+      baseUrl: "https://test.com/v1",
+      models: [{ name: "model-1", default: true }],
+    };
+    const def = buildCustomProviderDefinition(cp);
+    const env = def.buildEnv("my-key", "model-1");
+    expect(env).toEqual({
+      ANTHROPIC_BASE_URL: "https://test.com/v1",
+      ANTHROPIC_AUTH_TOKEN: "my-key",
+      ANTHROPIC_MODEL: "model-1",
+    });
+  });
+
+  it("uses default 2-var template when envVars is omitted and no models", () => {
+    const cp: CustomProviderConfig = {
+      id: "test",
+      displayName: "Test",
+      baseUrl: "https://test.com/v1",
+    };
+    const def = buildCustomProviderDefinition(cp);
+    const env = def.buildEnv("my-key", "");
+    expect(env).toEqual({
+      ANTHROPIC_BASE_URL: "https://test.com/v1",
+      ANTHROPIC_AUTH_TOKEN: "my-key",
+    });
+    expect(env).not.toHaveProperty("ANTHROPIC_MODEL");
+  });
+
+  it("substitutes {{API_KEY}} and {{MODEL}} placeholders in envVars", () => {
+    const cp: CustomProviderConfig = {
+      id: "test",
+      displayName: "Test",
+      baseUrl: "https://test.com/v1",
+      envVars: {
+        ANTHROPIC_BASE_URL: "https://test.com/v1",
+        ANTHROPIC_AUTH_TOKEN: "{{API_KEY}}",
+        ANTHROPIC_MODEL: "{{MODEL}}",
+        API_TIMEOUT_MS: "3000000",
+      },
+    };
+    const def = buildCustomProviderDefinition(cp);
+    const env = def.buildEnv("my-key", "my-model");
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe("my-key");
+    expect(env.ANTHROPIC_MODEL).toBe("my-model");
+    expect(env.API_TIMEOUT_MS).toBe("3000000");
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://test.com/v1");
+  });
+
+  it("forces ANTHROPIC_BASE_URL to match baseUrl", () => {
+    const cp: CustomProviderConfig = {
+      id: "test",
+      displayName: "Test",
+      baseUrl: "https://test.com/v1",
+      envVars: {
+        ANTHROPIC_AUTH_TOKEN: "{{API_KEY}}",
+      },
+    };
+    const def = buildCustomProviderDefinition(cp);
+    const env = def.buildEnv("key", "model");
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://test.com/v1");
+  });
+
+  it("sets models to empty array when omitted", () => {
+    const cp: CustomProviderConfig = {
+      id: "test",
+      displayName: "Test",
+      baseUrl: "https://test.com/v1",
+    };
+    const def = buildCustomProviderDefinition(cp);
+    expect(def.models).toEqual([]);
+  });
+
+  it("preserves models from config", () => {
+    const cp: CustomProviderConfig = {
+      id: "test",
+      displayName: "Test",
+      baseUrl: "https://test.com/v1",
+      models: [
+        { name: "m1", displayName: "Model 1", default: true },
+        { name: "m2" },
+      ],
+    };
+    const def = buildCustomProviderDefinition(cp);
+    expect(def.models).toHaveLength(2);
+    expect(def.models[0].displayName).toBe("Model 1");
+  });
+
+  it("sets apiKeyUrl to empty string", () => {
+    const cp: CustomProviderConfig = {
+      id: "test",
+      displayName: "Test",
+      baseUrl: "https://test.com/v1",
+    };
+    const def = buildCustomProviderDefinition(cp);
+    expect(def.apiKeyUrl).toBe("");
+  });
+});
+
+describe("getAllProviders", () => {
+  it("returns only built-in providers when no custom providers", () => {
+    const result = getAllProviders({});
+    expect(result).toEqual(PROVIDERS);
+  });
+
+  it("appends custom providers after built-in ones", () => {
+    const config = {
+      customProviders: [
+        { id: "custom-1", displayName: "Custom 1", baseUrl: "https://c1.com/v1" },
+      ],
+    };
+    const result = getAllProviders(config);
+    expect(result.length).toBe(PROVIDERS.length + 1);
+    expect(result[result.length - 1].id).toBe("custom-1");
+  });
+
+  it("skips custom providers with IDs conflicting with built-in", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const config = {
+      customProviders: [
+        { id: "ark", displayName: "Fake Ark", baseUrl: "https://fake.com/v1" },
+        { id: "valid", displayName: "Valid", baseUrl: "https://valid.com/v1" },
+      ],
+    };
+    const result = getAllProviders(config);
+    expect(result.length).toBe(PROVIDERS.length + 1);
+    expect(result.find((p) => p.id === "valid")).toBeDefined();
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("ark"));
+    spy.mockRestore();
+  });
+
+  it("skips custom providers with invalid envVars (non-string values)", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const config = {
+      customProviders: [
+        {
+          id: "bad",
+          displayName: "Bad",
+          baseUrl: "https://bad.com/v1",
+          envVars: { SOME_KEY: 123 as unknown as string },
+        },
+      ],
+    };
+    const result = getAllProviders(config);
+    expect(result.length).toBe(PROVIDERS.length);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe("getAllManagedEnvKeys", () => {
+  it("returns static keys when no custom providers", () => {
+    const result = getAllManagedEnvKeys({});
+    expect(result).toEqual([...MANAGED_ENV_KEYS]);
+  });
+
+  it("includes custom provider envVars keys", () => {
+    const config = {
+      customProviders: [
+        {
+          id: "test",
+          displayName: "Test",
+          baseUrl: "https://test.com/v1",
+          envVars: {
+            ANTHROPIC_BASE_URL: "https://test.com/v1",
+            ANTHROPIC_AUTH_TOKEN: "{{API_KEY}}",
+            CUSTOM_TIMEOUT: "5000",
+          },
+        },
+      ],
+    };
+    const result = getAllManagedEnvKeys(config);
+    expect(result).toContain("CUSTOM_TIMEOUT");
+    expect(result).toContain("ANTHROPIC_BASE_URL");
+  });
+
+  it("includes persisted managedEnvKeys from config", () => {
+    const config = {
+      managedEnvKeys: ["OLD_DELETED_KEY"],
+    };
+    const result = getAllManagedEnvKeys(config);
+    expect(result).toContain("OLD_DELETED_KEY");
+  });
+
+  it("deduplicates keys", () => {
+    const config = {
+      managedEnvKeys: ["ANTHROPIC_BASE_URL", "CUSTOM_KEY"],
+      customProviders: [
+        {
+          id: "test",
+          displayName: "Test",
+          baseUrl: "https://test.com/v1",
+          envVars: { ANTHROPIC_BASE_URL: "x", CUSTOM_KEY: "y" },
+        },
+      ],
+    };
+    const result = getAllManagedEnvKeys(config);
+    const baseUrlCount = result.filter((k) => k === "ANTHROPIC_BASE_URL").length;
+    expect(baseUrlCount).toBe(1);
   });
 });
