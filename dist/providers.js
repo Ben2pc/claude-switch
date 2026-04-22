@@ -47,7 +47,7 @@ export const PROVIDERS = [
     },
     {
         id: "zhipu",
-        displayName: "Zhipu",
+        displayName: "Zhipu (CN)",
         baseUrl: "https://open.bigmodel.cn/api/anthropic",
         apiKeyUrl: "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
         models: [
@@ -69,7 +69,7 @@ export const PROVIDERS = [
     },
     {
         id: "minimax",
-        displayName: "MiniMax",
+        displayName: "MiniMax (CN)",
         baseUrl: "https://api.minimaxi.com/anthropic",
         apiKeyUrl: "https://platform.minimaxi.com",
         models: [{ name: "MiniMax-M2.7", default: true }],
