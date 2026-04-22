@@ -6,8 +6,9 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
 ? Select Provider (ESC to quit)
 ❯ Claude (Native)  ● active
   Volcano Ark      ○ not configured
-  Zhipu            ✔ configured
-  MiniMax          ○ not configured
+  Zhipu (CN)       ✔ configured
+  MiniMax (CN)     ○ not configured
+  Kimi (CN)        ○ not configured
 ```
 
 ## Features
@@ -17,7 +18,7 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
 - MCP Server management — enable/disable MCP servers across providers
 - Model descriptions for Ark models (from official documentation)
 - Native env backup & restore when switching away from Claude
-- Shell env override detection (`ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`)
+- Shell env override detection (`ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`)
 - ESC key navigation at every menu level
 - File-based logging with API key redaction
 
@@ -29,6 +30,7 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
 | **Volcano Ark** | doubao-seed-2.0-code, doubao-seed-2.0-pro, doubao-seed-2.0-lite, doubao-seed-code, minimax-m2.7, glm-5.1, deepseek-v3.2, kimi-k2.6, ark-code-latest |
 | **Zhipu (CN)** | GLM-5.1, GLM-5-Turbo, GLM-5 |
 | **MiniMax (CN)** | MiniMax-M2.7 |
+| **Kimi (CN)** | kimi-for-coding |
 
 ## Install
 
