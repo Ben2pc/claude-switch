@@ -101,6 +101,14 @@ describe("detectActiveProviderFromSettings", () => {
     ).toBe("minimax");
   });
 
+  it("returns 'deepseek' when ANTHROPIC_BASE_URL matches DeepSeek", () => {
+    expect(
+      detectActiveProviderFromSettings({
+        env: { ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic" },
+      }),
+    ).toBe("deepseek");
+  });
+
   it("returns 'unknown' when ANTHROPIC_BASE_URL does not match any provider", () => {
     expect(
       detectActiveProviderFromSettings({

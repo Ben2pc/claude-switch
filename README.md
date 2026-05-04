@@ -9,6 +9,7 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
   Zhipu (CN)       ✔ configured
   MiniMax (CN)     ○ not configured
   Kimi (CN)        ○ not configured
+  DeepSeek (CN)     ○ not configured
 ```
 
 ## Features
@@ -31,17 +32,37 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
 | **Zhipu (CN)** | GLM-5.1, GLM-5-Turbo, GLM-5 |
 | **MiniMax (CN)** | MiniMax-M2.7 |
 | **Kimi (CN)** | kimi-for-coding |
+| **DeepSeek (CN)** | deepseek-v4-pro[1m], deepseek-v4-flash |
+
+## Usage
+
+### Interactive (TUI)
+
+```bash
+claude-switch
+```
+
+### Quick Switch (CLI)
+
+```bash
+claude-switch <provider> [model]
+```
+
+Examples:
+
+```bash
+claude-switch ark                        # Ark, default model
+claude-switch ark kimi-k2.6              # Ark + specific model
+claude-switch deepseek                   # DeepSeek, default V4 Pro
+claude-switch deepseek deepseek-v4-flash # DeepSeek + Flash
+claude-switch claude                     # Back to Claude Native
+claude-switch list                       # List all providers
+```
 
 ## Install
 
 ```bash
 npm install -g @ben1849/claude-switch
-```
-
-Then run:
-
-```bash
-claude-switch
 ```
 
 ## How It Works

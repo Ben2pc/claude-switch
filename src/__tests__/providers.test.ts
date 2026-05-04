@@ -79,6 +79,19 @@ describe("buildEnv", () => {
     expect(env.API_TIMEOUT_MS).toBe("3000000");
   });
 
+  it("DeepSeek flash model selection still routes heavy tasks to Pro", () => {
+    const deepseek = PROVIDERS.find((p) => p.id === "deepseek")!;
+    const env = deepseek.buildEnv("key", "deepseek-v4-flash");
+    // ANTHROPIC_MODEL follows user selection
+    expect(env.ANTHROPIC_MODEL).toBe("deepseek-v4-flash");
+    // Tier models remain fixed — heavy tasks still use Pro
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("deepseek-v4-pro[1m]");
+    expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("deepseek-v4-pro[1m]");
+    expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("deepseek-v4-flash");
+    expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("deepseek-v4-flash");
+    expect(env.CLAUDE_CODE_EFFORT_LEVEL).toBe("max");
+  });
+
   it("Kimi uses ANTHROPIC_API_KEY and ANTHROPIC_MODEL", () => {
     const kimi = PROVIDERS.find((p) => p.id === "kimi")!;
     const env = kimi.buildEnv("key", "kimi-for-coding");
@@ -87,6 +100,22 @@ describe("buildEnv", () => {
     expect(env.ANTHROPIC_MODEL).toBe("kimi-for-coding");
     expect(env).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
     expect(env).not.toHaveProperty("ANTHROPIC_DEFAULT_OPUS_MODEL");
+  });
+
+  it("DeepSeek uses ANTHROPIC_AUTH_TOKEN with fixed tier model assignments", () => {
+    const deepseek = PROVIDERS.find((p) => p.id === "deepseek")!;
+    const env = deepseek.buildEnv("ds-key-123", "deepseek-v4-pro[1m]");
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://api.deepseek.com/anthropic");
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe("ds-key-123");
+    expect(env.ANTHROPIC_MODEL).toBe("deepseek-v4-pro[1m]");
+    // Tier models are fixed per DeepSeek's Claude Code integration docs
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("deepseek-v4-pro[1m]");
+    expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("deepseek-v4-pro[1m]");
+    expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("deepseek-v4-flash");
+    expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("deepseek-v4-flash");
+    expect(env.CLAUDE_CODE_EFFORT_LEVEL).toBe("max");
+    expect(env).not.toHaveProperty("ANTHROPIC_API_KEY");
+    expect(env).not.toHaveProperty("API_TIMEOUT_MS");
   });
 });
 
@@ -140,6 +169,11 @@ describe("provider constraints", () => {
   it("MANAGED_ENV_KEYS includes ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN", () => {
     expect(MANAGED_ENV_KEYS).toContain("ANTHROPIC_BASE_URL");
     expect(MANAGED_ENV_KEYS).toContain("ANTHROPIC_AUTH_TOKEN");
+  });
+
+  it("MANAGED_ENV_KEYS includes CLAUDE_CODE_SUBAGENT_MODEL and CLAUDE_CODE_EFFORT_LEVEL", () => {
+    expect(MANAGED_ENV_KEYS).toContain("CLAUDE_CODE_SUBAGENT_MODEL");
+    expect(MANAGED_ENV_KEYS).toContain("CLAUDE_CODE_EFFORT_LEVEL");
   });
 });
 
