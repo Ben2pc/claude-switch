@@ -79,6 +79,19 @@ describe("buildEnv", () => {
     expect(env.API_TIMEOUT_MS).toBe("3000000");
   });
 
+  it("DeepSeek flash model selection still routes heavy tasks to Pro", () => {
+    const deepseek = PROVIDERS.find((p) => p.id === "deepseek")!;
+    const env = deepseek.buildEnv("key", "deepseek-v4-flash");
+    // ANTHROPIC_MODEL follows user selection
+    expect(env.ANTHROPIC_MODEL).toBe("deepseek-v4-flash");
+    // Tier models remain fixed — heavy tasks still use Pro
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("deepseek-v4-pro[1m]");
+    expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("deepseek-v4-pro[1m]");
+    expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("deepseek-v4-flash");
+    expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("deepseek-v4-flash");
+    expect(env.CLAUDE_CODE_EFFORT_LEVEL).toBe("max");
+  });
+
   it("Kimi uses ANTHROPIC_API_KEY and ANTHROPIC_MODEL", () => {
     const kimi = PROVIDERS.find((p) => p.id === "kimi")!;
     const env = kimi.buildEnv("key", "kimi-for-coding");

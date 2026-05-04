@@ -111,8 +111,8 @@ export const PROVIDERS = [
         baseUrl: "https://api.deepseek.com/anthropic",
         apiKeyUrl: "https://platform.deepseek.com/api_keys",
         models: [
-            { name: "deepseek-v4-pro[1m]", displayName: "DeepSeek V4 Pro", description: "Flagship. Complex reasoning, 1M context", default: true },
-            { name: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash", description: "Fast, cost-efficient for subagents & lightweight tasks" },
+            { name: "deepseek-v4-pro[1m]", displayName: "DeepSeek V4 Pro", description: "Flagship reasoning, 1M context", default: true },
+            { name: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash", description: "Fast; heavy tasks use Pro" },
         ],
         buildEnv(apiKey, model) {
             return {

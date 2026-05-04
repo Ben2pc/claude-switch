@@ -9,6 +9,7 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
   Zhipu (CN)       ✔ configured
   MiniMax (CN)     ○ not configured
   Kimi (CN)        ○ not configured
+  DeepSeek (CN)     ○ not configured
 ```
 
 ## Features
@@ -31,6 +32,8 @@ Interactive TUI tool to switch [Claude Code](https://docs.anthropic.com/en/docs/
 | **Zhipu (CN)** | GLM-5.1, GLM-5-Turbo, GLM-5 |
 | **MiniMax (CN)** | MiniMax-M2.7 |
 | **Kimi (CN)** | kimi-for-coding |
+
+| **DeepSeek (CN)** | deepseek-v4-pro[1m], deepseek-v4-flash |
 
 ## Install
 
