@@ -34,6 +34,8 @@ export const MANAGED_ENV_KEYS = [
   "ANTHROPIC_DEFAULT_HAIKU_MODEL",
   "API_TIMEOUT_MS",
   "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+  "CLAUDE_CODE_SUBAGENT_MODEL",
+  "CLAUDE_CODE_EFFORT_LEVEL",
 ] as const;
 
 export const PROVIDERS: ProviderDefinition[] = [
@@ -125,6 +127,29 @@ export const PROVIDERS: ProviderDefinition[] = [
         ANTHROPIC_BASE_URL: this.baseUrl,
         ANTHROPIC_API_KEY: apiKey,
         ANTHROPIC_MODEL: model,
+      };
+    },
+  },
+  {
+    id: "deepseek",
+    displayName: "DeepSeek (CN)",
+    baseUrl: "https://api.deepseek.com/anthropic",
+    apiKeyUrl: "https://platform.deepseek.com/api_keys",
+    models: [
+      { name: "deepseek-v4-pro[1m]", displayName: "DeepSeek V4 Pro", description: "Flagship. Complex reasoning, 1M context", default: true },
+      { name: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash", description: "Fast, cost-efficient for subagents & lightweight tasks" },
+    ],
+    buildEnv(apiKey, model) {
+      return {
+        ANTHROPIC_BASE_URL: this.baseUrl,
+        ANTHROPIC_AUTH_TOKEN: apiKey,
+        ANTHROPIC_MODEL: model,
+        // Fixed tier model assignments per DeepSeek Claude Code integration docs
+        ANTHROPIC_DEFAULT_OPUS_MODEL: "deepseek-v4-pro[1m]",
+        ANTHROPIC_DEFAULT_SONNET_MODEL: "deepseek-v4-pro[1m]",
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-v4-flash",
+        CLAUDE_CODE_SUBAGENT_MODEL: "deepseek-v4-flash",
+        CLAUDE_CODE_EFFORT_LEVEL: "max",
       };
     },
   },
